@@ -1,8 +1,9 @@
-#ifndef CACHE_SET_LRU_H
-#define CACHE_SET_LRU_H
+#ifndef CACHE_SET_LRU_NEW_H
+#define CACHE_SET_LRU_NEW_H
 
 #include "cache_set.h"
-
+#include "cache_set_lru.h"
+/*
 class CacheSetInfoLRU : public CacheSetInfo
 {
    public:
@@ -24,14 +25,14 @@ class CacheSetInfoLRU : public CacheSetInfo
       const UInt32 m_associativity;
       UInt64* m_access;
       UInt64* m_attempts;
-};
+};*/
 
-class CacheSetLRU : public CacheSet
+class CacheSetLRUNEW : public CacheSet
 {
    public:
-      CacheSetLRU(CacheBase::cache_t cache_type,
+      CacheSetLRUNEW(CacheBase::cache_t cache_type,
             UInt32 associativity, UInt32 blocksize, CacheSetInfoLRU* set_info, UInt8 num_attempts);
-      virtual ~CacheSetLRU();
+      virtual ~CacheSetLRUNEW();
 
       virtual UInt32 getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index);
       void updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index);

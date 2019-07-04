@@ -1,28 +1,28 @@
-#include "cache_set_lru.h"
+#include "cache_set_lru_new.h"
 #include "log.h"
 #include "stats.h"
 
 // Implements LRU replacement, optionally augmented with Query-Based Selection [Jaleel et al., MICRO'10]
 
-CacheSetLRU::CacheSetLRU(
+CacheSetLRUNEW::CacheSetLRUNEW(
       CacheBase::cache_t cache_type,
       UInt32 associativity, UInt32 blocksize, CacheSetInfoLRU* set_info, UInt8 num_attempts)
    : CacheSet(cache_type, associativity, blocksize)
    , m_num_attempts(num_attempts)
    , m_set_info(set_info)
-{
+{ 
    m_lru_bits = new UInt8[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
-      m_lru_bits[i] = i;
+      m_lru_bits[i] = i;   
 }
 
-CacheSetLRU::~CacheSetLRU()
+CacheSetLRUNEW::~CacheSetLRUNEW()
 {
    delete [] m_lru_bits;
 }
 
 UInt32
-CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index)
+CacheSetLRUNEW::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index)
 {
    // First try to find an invalid block
    for (UInt32 i = 0; i < m_associativity; i++)
@@ -40,7 +40,6 @@ CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr ei
    {
       UInt32 index = 0;
       UInt8 max_bits = 0;
-      
       for (UInt32 i = 0; i < m_associativity; i++)
       {
          if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -75,28 +74,18 @@ CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr ei
       }
    }
 
-   LOG_PRINT_ERROR("Should not reach here");
+   LOG_PRINT_ERROR("Should not reach here");   
 }
 
 void
-CacheSetLRU::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
+CacheSetLRUNEW::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
 {
-   if(write_flag==1)
-      //printf("updateReplacementIndex for L1 called and write_flag is %d \n", write_flag); //nss
    m_set_info->increment(m_lru_bits[accessed_index]);
    moveToMRU(accessed_index);
 }
 
-////////////created by Arindam//////////////////sn
 void
-CacheSetLRU::updateLoopBitPolicy(UInt32 index, UInt8 loopbit)
-{
-  
-}
-//////////////////////////////////////////////////
-
-void
-CacheSetLRU::moveToMRU(UInt32 accessed_index)
+CacheSetLRUNEW::moveToMRU(UInt32 accessed_index)
 {
    for (UInt32 i = 0; i < m_associativity; i++)
    {
@@ -106,6 +95,15 @@ CacheSetLRU::moveToMRU(UInt32 accessed_index)
    m_lru_bits[accessed_index] = 0;
 }
 
+////////////created by Arindam//////////////////sn
+void
+CacheSetLRUNEW::updateLoopBitPolicy(UInt32 index, UInt8 loopbit)
+{
+  
+}
+//////////////////////////////////////////////////
+
+/*
 CacheSetInfoLRU::CacheSetInfoLRU(String name, String cfgname, core_id_t core_id, UInt32 associativity, UInt8 num_attempts)
    : m_associativity(associativity)
    , m_attempts(NULL)
@@ -133,4 +131,4 @@ CacheSetInfoLRU::~CacheSetInfoLRU()
    delete [] m_access;
    if (m_attempts)
       delete [] m_attempts;
-}
+}*/

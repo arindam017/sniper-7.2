@@ -1,8 +1,9 @@
-#ifndef CACHE_SET_LRU_H
-#define CACHE_SET_LRU_H
+#ifndef CACHE_SET_LRU_L3_H
+#define CACHE_SET_LRU_L3_H
 
 #include "cache_set.h"
-
+#include "cache_set_lru.h"
+/*
 class CacheSetInfoLRU : public CacheSetInfo
 {
    public:
@@ -24,22 +25,23 @@ class CacheSetInfoLRU : public CacheSetInfo
       const UInt32 m_associativity;
       UInt64* m_access;
       UInt64* m_attempts;
-};
+};*/
 
-class CacheSetLRU : public CacheSet
+class CacheSetLRUL3 : public CacheSet
 {
    public:
-      CacheSetLRU(CacheBase::cache_t cache_type,
+      CacheSetLRUL3(CacheBase::cache_t cache_type,
             UInt32 associativity, UInt32 blocksize, CacheSetInfoLRU* set_info, UInt8 num_attempts);
-      virtual ~CacheSetLRU();
+      virtual ~CacheSetLRUL3();
 
       virtual UInt32 getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index);
       void updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index);
-      void updateLoopBitPolicy(UInt32 index, UInt8 loopbit); //sn
+      void updateLoopBitPolicy(UInt32 index, UInt8 loopbit);   //sn
 
    protected:
       const UInt8 m_num_attempts;
       UInt8* m_lru_bits;
+      UInt8* loop_bit_l3;
       CacheSetInfoLRU* m_set_info;
       void moveToMRU(UInt32 accessed_index);
 };
