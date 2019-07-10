@@ -22,7 +22,7 @@ CacheSetLRUNEW::~CacheSetLRUNEW()
 }
 
 UInt32
-CacheSetLRUNEW::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip)
+CacheSetLRUNEW::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index)
 {
    // First try to find an invalid block
    for (UInt32 i = 0; i < m_associativity; i++)
@@ -78,7 +78,7 @@ CacheSetLRUNEW::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr
 }
 
 void
-CacheSetLRUNEW::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag)
+CacheSetLRUNEW::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
 {
    m_set_info->increment(m_lru_bits[accessed_index]);
    moveToMRU(accessed_index);

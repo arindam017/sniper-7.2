@@ -60,15 +60,53 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     results['performance_model.idle_elapsed_time'][c] / float(time0)
     for c in range(ncores)
   ]
-  
+
+  #udal: added for miss count
+  if 'interval_timer.Winner_SRRIP' in results:
+    results['interval_timer.win_srrip'] = [float(results['interval_timer.Winner_SRRIP'][core] or 1) for core in range(ncores)]
+    
+  if 'interval_timer.Winner_DAAIP' in results:
+    results['interval_timer.win_daaip'] = [float(results['interval_timer.Winner_DAAIP'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.SRRIP_Misses' in results:
+    results['interval_timer.srrip_misses'] = [float(results['interval_timer.SRRIP_Misses'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.DAAIP_Misses' in results:
+    results['interval_timer.daaip_misses'] = [float(results['interval_timer.DAAIP_Misses'][core] or 1) for core in range(ncores)]
+    
+  if 'interval_timer.SRRIP_Hits' in results:
+    results['interval_timer.SRRIP_Hits'] = [float(results['interval_timer.SRRIP_Hits'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.ATD_Misses' in results:
+    results['interval_timer.ATD_Misses'] = [float(results['interval_timer.ATD_Misses'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.ATD_Hits' in results:
+    results['interval_timer.ATD_Hits'] = [float(results['interval_timer.ATD_Hits'][core] or 1) for core in range(ncores)] 
+
+  if 'L3.NumberOfL3WriteFromDirectory' in results:
+    results['L3.NumberOfL3WriteFromDirectory'] = [float(results['L3.NumberOfL3WriteFromDirectory'][core] or 1) for core in range(ncores)] 
+
+  if 'L3.NumberOfL3WriteFromL2' in results:
+    results['L3.NumberOfL3WriteFromL2'] = [float(results['L3.NumberOfL3WriteFromL2'][core] or 1) for core in range(ncores)] 
+
+    
   template = [
-    ('  Global Time',  'performance_model.elapsed_time_fixed', str),
     ('  Instructions', 'performance_model.instruction_count', str),
     ('  Cycles',       'performance_model.cycle_count_fixed', format_int),
     ('  IPC',          'performance_model.ipc', format_float(3)),
     ('  Time (ns)',    'performance_model.elapsed_time_fixed', format_ns(0)),
     ('  Idle time (ns)', 'performance_model.idle_elapsed_time', format_ns(0)),
     ('  Idle time (%)',  'performance_model.idle_elapsed_percent', format_pct),
+    #('ATD', '', ''),
+    #('  SRRIP Wins    ',   'interval_timer.win_srrip', format_int),
+    #('  DAAIP Wins    ',   'interval_timer.win_daaip', format_int),
+    #('  SRRIP Misses    ',   'interval_timer.SRRIP_Misses', format_int),
+    #('  ATD Misses    ',   'interval_timer.ATD_Misses', format_int),
+    #('  SRRIP Hits    ',   'interval_timer.SRRIP_Hits', format_int),
+    #('  ATD hits    ',   'interval_timer.ATD_Hits', format_int),
+    #('  DAAIP Misses    ',   'interval_timer.daaip_misses', format_int),
+    ('  L3NumberOfL3WritesFromL2',        'L3.NumberOfL3WriteFromL2', format_int),
+    ('  L3NumberOfL3WritesFromDirectory', 'L3.NumberOfL3WriteFromDirectory', format_int),
   ]
 
   if 'branch_predictor.num-incorrect' in results:
@@ -107,76 +145,35 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   existcaches = [ c for c in allcaches if '%s.loads'%c in results ]
   for c in existcaches:
     results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
-    results['%s.stores'%c] = results['%s.stores'%c]
-    results['%s.loads'%c] = results['%s.loads'%c]
     results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))
-    results['%s.load-misses'%c] = results['%s.load-misses'%c]
-    results['%s.store-misses'%c] = map(sum, zip(results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))    
     results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
     results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([
       ('  Cache %s'%c, '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
-      ('    num cache loads', '%s.loads'%c, str),
-      ('    num cache stores', '%s.stores'%c, str),
       ('    num cache misses', '%s.misses'%c, str),
-      ('    num load  misses', '%s.load-misses'%c, str),
-      ('    num store misses', '%s.store-misses'%c, str),
       ('    miss rate', '%s.missrate'%c, lambda v: '%.2f%%' % v),
       ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
     ])
 
-  results['L3.LLCStore1'] = [results['L3.LLCStore1'][c]
-    for c in range(ncores)
-  ]
+############################################################
 
-  results['L3.LLCStore2'] = [results['L3.LLCStore2'][c]
-    for c in range(ncores)
-  ]
 
-  results['L3.access.loads'] = [results['L3.loads'][c]
-    for c in range(ncores)
-  ]
 
-  results['L3.access.stores'] = [results['L3.stores'][c]
-    for c in range(ncores)
-  ]
 
-  results['L3.access.loadsMiss'] = [results['L3.load-misses'][c]
-    for c in range(ncores)
-  ]
+ # results['L3.NumberOfL3WriteFromDirectory'] = [float(results['L3.NumberOfL3WriteFromDirectory'][c])	//sn anushree
+ #   for c in range(ncores)
+ # ]
 
-  results['L3.access.storeMisses-I'] = [results['L3.store-misses-I'][c]
-    for c in range(ncores)
-  ]
+ # results['L3.NumberOfL3WriteFromL2'] = [float(results['L3.NumberOfL3WriteFromL2'][c])	//sn anushree
+ #   for c in range(ncores)
+ # ]
 
-  results['L3.access.storeMisses-E'] = [results['L3.store-misses-E'][c]
-    for c in range(ncores)
-  ]
-  
-  results['L3.access.storeMisses'] = [results['L3.store-misses'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.writes'] = [results['L3.NumberOfL3Write'][c]
-    for c in range(ncores)
-  ]
-
-  template += [
-    ('  LLC Stats', '', '',),
-  ]
-  
-  template.extend([
-  ('  Store1', 'L3.LLCStore1', str),
-  ('  Store2', 'L3.LLCStore2', str),
-  ('  Loads', 'L3.access.loads', str),
-  ('  LoadMisses', 'L3.access.loadsMiss', str),
-  ('  Stores', 'L3.access.stores', str),
-  ('  StoreMisses-I', 'L3.access.storeMisses-I', str),
-  ('  StoreMisses-E', 'L3.access.storeMisses-E', str),
-  ('  StoreMisses', 'L3.access.storeMisses', str),
-  ('  L3Insert', 'L3.writes', str),
-  ])
+#template.extend([
+#  ('  L3NumberOfL3WritesFromL2', 'L3.NumberOfL3WriteFromL2', format_int),
+#  ('  L3NumberOfL3WritesFromDirectory', 'L3.NumberOfL3WriteFromDirectory', format_int),
+#])
+############################################################
 
   allcaches = [ 'nuca-cache', 'dram-cache' ]
   existcaches = [ c for c in allcaches if '%s.reads'%c in results ]
@@ -279,3 +276,4 @@ if __name__ == '__main__':
     sys.exit(-1)
 
   generate_simout(jobid = jobid, resultsdir = resultsdir, partial = partial)
+

@@ -12,12 +12,24 @@
 
 #include <cstring>
 
-static UInt64 g_NumberOfL3Write;
-static UInt64 g_NumberOfL3Read;
-static UInt64 g_NumberOfL3Access;
-static UInt64 g_NumberOfL3Misses;
-static UInt64 gLLCStore2;
-static UInt64 gLLCStore1;
+IntPtr eip_global;
+IntPtr eip_global_2;
+UInt8 l3_hit_flag; //flagset
+static UInt64 g_NumberOfL3WritesDueToWriteBack; //nss
+static UInt64 g_NumberOfL3WritesFromDirectory; //nss
+extern UInt8 global_loop_bit_writeback; //nss; This is the loop bit to be written back from L2 to L3
+//UInt8 m_state[256];
+
+//for(UInt16 i = 0; i < 256; i++)
+//{
+   //printf("i is %d \n",i);
+//   m_state[i] = 0;   
+//}
+
+#define STARTING_WAY_TO_SRAM    100
+#define ENDING_WAY_TO_SRAM    300
+
+//l3_hit_flag=0 means the block was not a l3 hit. l3_hit_flag=1 indicates that l2 miss was serviced by l3. l3_hit_flag/write_flag=3 this means L3 insert from dram directory [ARINDAM]
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -153,7 +165,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_cache_block_size(cache_block_size),
    m_cache_writethrough(cache_params.writethrough),
    m_writeback_time(cache_params.writeback_time),
-   m_data_write_time(cache_params.data_write_time),
+   m_data_write_time(cache_params.data_write_time),	//sn; added from Anushree's files
    m_next_level_read_bandwidth(cache_params.next_level_read_bandwidth),
    m_shared_cores(cache_params.shared_cores),
    m_user_thread_sem(user_thread_sem),
@@ -163,14 +175,6 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_shmem_perf_global(NULL),
    m_shmem_perf_model(shmem_perf_model)
 {
-   if (m_mem_component == MemComponent::L3_CACHE)
-   {
-       printf("========================\n");
-       printf("m_writeback_time:%s\n", itostr(m_writeback_time.getLatency()).c_str());
-       printf("m_data_write_time:%s\n", itostr(m_data_write_time.getLatency()).c_str());
-       printf("========================\n");
-   }
-
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
    Sim()->getStatsManager()->logTopology(name, core_id, m_core_id_master);
 
@@ -223,13 +227,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 
    bzero(&stats, sizeof(stats));
 
-   registerStatsMetric(name, core_id, "NumberOfL3Write",  &g_NumberOfL3Write);
-   registerStatsMetric(name, core_id, "NumberOfL3Read",   &g_NumberOfL3Read);
-   registerStatsMetric(name, core_id, "NumberOfL3Access", &g_NumberOfL3Access);
-   registerStatsMetric(name, core_id, "NumberOfL3Misses", &g_NumberOfL3Misses);
-
-   registerStatsMetric(name, core_id, "LLCStore1", &gLLCStore1);
-   registerStatsMetric(name, core_id, "LLCStore2", &gLLCStore2);
+   registerStatsMetric(name, core_id, "NumberOfL3WriteFromDirectory",  &g_NumberOfL3WritesFromDirectory);	//sn from Anushree
+   registerStatsMetric(name, core_id, "NumberOfL3WriteFromL2",  	   &g_NumberOfL3WritesDueToWriteBack);
 
    registerStatsMetric(name, core_id, "loads", &stats.loads);
    registerStatsMetric(name, core_id, "stores", &stats.stores);
@@ -344,8 +343,12 @@ CacheCntlr::processMemOpFromCore(
       IntPtr ca_address, UInt32 offset,
       Byte* data_buf, UInt32 data_length,
       bool modeled,
-      bool count)
+      bool count,
+      IntPtr eip) //sn eip(PC) added by arindam
 {
+
+   //printf("processMemOpFromCore is called and eip is: %" PRIxPTR "\n", eip);  //ssn
+   eip_global_2=eip;
    HitWhere::where_t hit_where = HitWhere::MISS;
 
    // Protect against concurrent access from sibling SMT threads
@@ -353,10 +356,10 @@ CacheCntlr::processMemOpFromCore(
 
    LOG_PRINT("processMemOpFromCore(), lock_signal(%u), mem_op_type(%u), ca_address(0x%x)",
              lock_signal, mem_op_type, ca_address);
-MYLOG("----------------------------------------------");
-MYLOG("%c%c %lx+%u..+%u", mem_op_type == Core::WRITE ? 'W' : 'R', mem_op_type == Core::READ_EX ? 'X' : ' ', ca_address, offset, data_length);
-LOG_ASSERT_ERROR((ca_address & (getCacheBlockSize() - 1)) == 0, "address at cache line + %x", ca_address & (getCacheBlockSize() - 1));
-LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u > %u", offset + data_length, getCacheBlockSize());
+   MYLOG("----------------------------------------------");
+   MYLOG("%c%c %lx+%u..+%u", mem_op_type == Core::WRITE ? 'W' : 'R', mem_op_type == Core::READ_EX ? 'X' : ' ', ca_address, offset, data_length);
+   LOG_ASSERT_ERROR((ca_address & (getCacheBlockSize() - 1)) == 0, "address at cache line + %x", ca_address & (getCacheBlockSize() - 1));
+   LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u > %u", offset + data_length, getCacheBlockSize());
 
    #ifdef PRIVATE_L2_OPTIMIZATION
    /* if this is the second part of an atomic operation: we already have the lock, don't lock again */
@@ -370,7 +373,8 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
    bool lock_all = m_cache_writethrough && ((mem_op_type == Core::WRITE) || (lock_signal != Core::NONE));
 
     /* if this is the second part of an atomic operation: we already have the lock, don't lock again */
-   if (lock_signal != Core::UNLOCK) {
+   if (lock_signal != Core::UNLOCK) 
+   {
       if (lock_all)
          acquireStackLock(ca_address);
       else
@@ -391,7 +395,8 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
          cache_block_info->setCState(CacheState::MODIFIED);
       else
       {
-         insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD);
+         //printf("insertCacheBlock called in line 397 \n");  //ssn
+         insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD, 100, eip); //sn garbage value 100 and 0 passed
          cache_block_info = getCacheBlockInfo(ca_address);
       }
    }
@@ -412,8 +417,8 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
 
    if (cache_hit)
    {
-MYLOG("L1 hit");
-      /* For L1 cache. So, will remain same even for Hybrid Cache */  
+      MYLOG("L1 hit");
+      //printf("L1 hit \n"); //ns
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
 
@@ -461,9 +466,12 @@ MYLOG("L1 hit");
          }
       }
 
-   } else {
+   } 
+   else //L1 miss
+   {
       /* cache miss: either wrong coherency state or not present in the cache */
-MYLOG("L1 miss");
+      MYLOG("L1 miss");
+      //printf("L1 miss \n"); //ns
       if (!m_passthrough)
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
@@ -495,17 +503,22 @@ MYLOG("L1 miss");
          invalidateCacheBlock(ca_address);
       }
 
-MYLOG("processMemOpFromCore l%d before next", m_mem_component);
-      hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, ca_address, modeled, count, Prefetch::NONE, t_start, false);
+      MYLOG("processMemOpFromCore l%d before next", m_mem_component);
+      l3_hit_flag=0;
+      //printf("l3_hit_flag is set to 0 \n");  //sn
+      hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, ca_address, modeled, count, Prefetch::NONE, t_start, false, eip);  //sn eip(PC) added by arindam
       bool next_cache_hit = hit_where != HitWhere::MISS;
-MYLOG("processMemOpFromCore l%d next hit = %d", m_mem_component, next_cache_hit);
+      MYLOG("processMemOpFromCore l%d next hit = %d", m_mem_component, next_cache_hit);
 
-      if (next_cache_hit) {
+      if (next_cache_hit) 
+      {
 
-      } else {
+      }
+      else 
+      {
          /* last level miss, a message has been sent. */
 
-MYLOG("processMemOpFromCore l%d waiting for sent message", m_mem_component);
+         MYLOG("processMemOpFromCore l%d waiting for sent message", m_mem_component);
          #ifdef PRIVATE_L2_OPTIMIZATION
          releaseLock(ca_address);
          #else
@@ -513,18 +526,18 @@ MYLOG("processMemOpFromCore l%d waiting for sent message", m_mem_component);
          #endif
 
          waitForNetworkThread();
-MYLOG("processMemOpFromCore l%d postwakeup", m_mem_component);
+         MYLOG("processMemOpFromCore l%d postwakeup", m_mem_component);
 
          //acquireStackLock(ca_address);
          // Pass stack lock through from network thread
 
          wakeUpNetworkThread();
-MYLOG("processMemOpFromCore l%d got message reply", m_mem_component);
+         MYLOG("processMemOpFromCore l%d got message reply", m_mem_component);
 
          /* have the next cache levels fill themselves with the new data */
-MYLOG("processMemOpFromCore l%d before next fill", m_mem_component);
-         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, ca_address, false, false, Prefetch::NONE, t_start, true);
-MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
+         MYLOG("processMemOpFromCore l%d before next fill", m_mem_component);
+         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, ca_address, false, false, Prefetch::NONE, t_start, true, eip);  //sn eip(PC) added by arindam
+         MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
          LOG_ASSERT_ERROR(hit_where != HitWhere::MISS,
             "Tried to read in next-level cache, but data is already gone");
 
@@ -537,7 +550,7 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
 
       /* data should now be in next-level cache, go get it */
       SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-      copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now);
+      copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now, 100);    //sn added the last argument. garbage value 100 is passed as it is not required during this call
 
       cache_block_info = getCacheBlockInfo(ca_address);
 
@@ -571,7 +584,7 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
 
 
    accessCache(mem_op_type, ca_address, offset, data_buf, data_length, hit_where == HitWhere::where_t(m_mem_component) && count);
-MYLOG("access done");
+   MYLOG("access done");
 
 
    SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -604,13 +617,9 @@ MYLOG("access done");
       #endif
 
       if (mem_op_type == Core::WRITE)
-      {
          stats.stores_where[hit_where]++;
-      }
       else
-      {
          stats.loads_where[hit_where]++;
-      }
    }
 
 
@@ -648,12 +657,12 @@ CacheCntlr::updateHits(Core::mem_op_t mem_op_type, UInt64 hits)
 
 
 void
-CacheCntlr::copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_now)
+CacheCntlr::copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_now, UInt8 flag)  //sn flag added by arindam
 {
    // TODO: what if it's already gone? someone else may invalitate it between the time it arrived an when we get here...
    LOG_ASSERT_ERROR(m_next_cache_cntlr->operationPermissibleinCache(address, mem_op_type),
       "Tried to read from next-level cache, but data is already gone");
-MYLOG("copyDataFromNextLevel l%d", m_mem_component);
+   MYLOG("copyDataFromNextLevel l%d", m_mem_component);
 
    Byte data_buf[m_next_cache_cntlr->getCacheBlockSize()];
    m_next_cache_cntlr->retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD, false);
@@ -681,7 +690,8 @@ MYLOG("copyDataFromNextLevel l%d", m_mem_component);
    else
    {
       // Insert the Cache Block in our own cache
-      insertCacheBlock(address, cstate, data_buf, m_core_id, ShmemPerfModel::_USER_THREAD);
+      //printf("insertCacheBlock called in line 692 \n");  //ssn
+      insertCacheBlock(address, cstate, data_buf, m_core_id, ShmemPerfModel::_USER_THREAD, flag, eip_global_2);  //sn last 0 is garbage
       MYLOG("copyDataFromNextLevel l%d done (inserted)", m_mem_component);
    }
 }
@@ -758,7 +768,7 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
    MYLOG("prefetching %lx", prefetch_address);
    SubsecondTime t_before = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_start); // Start the prefetch at the same time as the original miss
-   HitWhere::where_t hit_where = processShmemReqFromPrevCache(this, Core::READ, prefetch_address, true, true, Prefetch::OWN, t_start, false);
+   HitWhere::where_t hit_where = processShmemReqFromPrevCache(this, Core::READ, prefetch_address, true, true, Prefetch::OWN, t_start, false, 0);   //sn last argument (0) is actually a garbage value of PC
 
    if (hit_where == HitWhere::MISS)
    {
@@ -768,7 +778,7 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
       waitForNetworkThread();
       wakeUpNetworkThread();
 
-      hit_where = processShmemReqFromPrevCache(this, Core::READ, prefetch_address, false, false, Prefetch::OWN, t_start, false);
+      hit_where = processShmemReqFromPrevCache(this, Core::READ, prefetch_address, false, false, Prefetch::OWN, t_start, false, 0); //sn last argument (0) is actually a garbage value of PC
 
       LOG_ASSERT_ERROR(hit_where != HitWhere::MISS, "Line was not there after prefetch");
    }
@@ -783,8 +793,11 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
  *****************************************************************************/
 
 HitWhere::where_t
-CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool count, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock)
+CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool count, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock, IntPtr eip)   //sn eip added by arindam
 {
+   //printf("%d calls processShmemReqFromPrevCache \n", m_mem_component); //n
+   //printf("processShmemReqFromPrevCache is called and eip is: %" PRIxPTR "\n", eip);  //ssn
+
    #ifdef PRIVATE_L2_OPTIMIZATION
    bool have_write_lock_internal = have_write_lock;
    if (! have_write_lock && m_shared_cores > 1)
@@ -808,7 +821,10 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if (cache_block_info)
          cache_block_info->setCState(CacheState::MODIFIED);
       else
-         cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD);
+      {
+         //printf("insertCacheBlock called in line 824 \n");  //ssn
+         cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD, 100, eip); //sn eip(PC) added by arindam
+      }
    }
    else if (cache_hit && m_passthrough && count)
    {
@@ -826,15 +842,12 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          getCache()->updateCounters(cache_hit);
       updateCounters(mem_op_type, address, cache_hit, getCacheState(address), isPrefetch);
     
-      /* Accounting for store */
-      if ((mem_op_type == Core::WRITE)
-      &&  (m_mem_component == MemComponent::L3_CACHE))
+      /* Accounting for stores which miss in L3 */ 		//sn: the following block added from Anushree's file
+      if ((mem_op_type == Core::WRITE) &&  (m_mem_component == MemComponent::L3_CACHE))
       {
-            gLLCStore2++;
+            //gLLCStore2++;
             //SubsecondTime time1 = getMemoryManager()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-            getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                                ShmemPerfModel::_USER_THREAD);
+            //getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
             //SubsecondTime time2 = getMemoryManager()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
             //printf("%lu:time1(%s) time2(%s) diff:%s\n", gLLCStore2, itostr(time1).c_str(),
             //                                            itostr(time2).c_str(),
@@ -844,6 +857,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 
    if (cache_hit)
    {
+      //printf("%d hit \n", m_mem_component);//ns
       if (isPrefetch == Prefetch::NONE && cache_block_info->hasOption(CacheBlockInfo::PREFETCH))
       {
          // This line was fetched by the prefetcher and has proven useful
@@ -876,36 +890,17 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          }
          else
          {
-            /* If the cache to be accessed is LLC, we need to check if the operation is
-             * read or write and then increment the elapsed time accordingly */
-            if ((mem_op_type == Core::READ) || (mem_op_type == Core::READ_EX))
+            if((mem_op_type == Core:: WRITE) && (m_mem_component==5))
             {
-                getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                    CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
-                                                    ShmemPerfModel::_USER_THREAD);
-                g_NumberOfL3Read++;
-            }
-            #if 0
-            else if (mem_op_type == Core::WRITE)
-            {
-                /* Since in case of Hybrid cache, only L3 cache has different
-                 * read/write latencies. For L3 cache consisting for STTRAM,
-                 * it will have different (larger write) latencies */
-                if (m_mem_component == MemComponent::L3_CACHE)
-                {
-                    g_NumberOfL3Write++;
-                    getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                        CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                                        ShmemPerfModel::_USER_THREAD);
-                }
-                else
-                {
-                    getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                        CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
-                                                        ShmemPerfModel::_USER_THREAD);
-                }
-            }
-            #endif
+               UInt32 blockIndex = m_master->m_cache->getBlockIndex(address);
+               //if index is 0,1,2,3,4 it is SRAM block, else STTRAM block
+               if ((blockIndex >= (STARTING_WAY_TO_SRAM)) && (blockIndex<=(ENDING_WAY_TO_SRAM)))  //SRAM blocks
+                  getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);         
+               else 
+                  getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+            }  
+            else 
+               getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
          }
       }
 
@@ -976,6 +971,17 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
    else // !cache_hit: either data is not here, or operation on data is not permitted
    {
       // Increment shared mem perf model cycle counts
+      //printf("%d miss \n", m_mem_component);//ns
+      
+      if(m_mem_component==4)  //flagset. This indicates L2 miss
+      {
+         if(l3_hit_flag==0)
+            l3_hit_flag=1;
+         else if(l3_hit_flag==1)
+            l3_hit_flag=0;
+         //printf("l3_hit_flag is %d \n", l3_hit_flag);  //sn
+      }
+      
       if (modeled)
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
@@ -999,13 +1005,14 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             invalidateCacheBlock(address);
 
          // let the next cache level handle it.
-         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, address, modeled, count, isPrefetch == Prefetch::NONE ? Prefetch::NONE : Prefetch::OTHER, t_issue, have_write_lock_internal);
+         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, address, modeled, count, isPrefetch == Prefetch::NONE ? Prefetch::NONE : Prefetch::OTHER, t_issue, have_write_lock_internal, eip);   //sn eip(PC) added by Arindam
          if (hit_where != HitWhere::MISS)
          {
             cache_hit = true;
             /* get the data for ourselves */
             SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-            copyDataFromNextLevel(mem_op_type, address, modeled, t_now);
+            //printf("l3_hit_flag is %d at copyDataFromNextLevel in 988 \n", l3_hit_flag);   //sn
+            copyDataFromNextLevel(mem_op_type, address, modeled, t_now, l3_hit_flag);  //sn added l3_hit_flag argument
             if (isPrefetch != Prefetch::NONE)
                getCacheBlockInfo(address)->setOption(CacheBlockInfo::PREFETCH);
          }
@@ -1014,6 +1021,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       {
          if (cache_block_info && cache_block_info->getCState() == CacheState::EXCLUSIVE)
          {
+            //printf("write on a shared block \n"); //n
             // Data is present, but still no cache_hit => this is a write on a SHARED block. Do Upgrade
             SubsecondTime latency = SubsecondTime::Zero();
             for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
@@ -1033,6 +1041,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          else if (m_master->m_dram_cntlr)
          {
             // Direct DRAM access
+            // printf("direct dram access \n"); //ns
             cache_hit = true;
             if (cache_block_info)
             {
@@ -1054,7 +1063,8 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
 
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
-               insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, m_core_id, ShmemPerfModel::_USER_THREAD);
+               //printf("insertCacheBlock called in line 1065 \n");  //ssn
+               insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, m_core_id, ShmemPerfModel::_USER_THREAD, 100, eip); //sn eip(PC) added by arindam
                if (isPrefetch != Prefetch::NONE)
                   getCacheBlockInfo(address)->setOption(CacheBlockInfo::PREFETCH);
 
@@ -1063,9 +1073,12 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          }
          else
          {
+            //printf("initiateDirectoryAccess \n"); //n
+            eip_global=eip;   //sn global created
             initiateDirectoryAccess(mem_op_type, address, isPrefetch != Prefetch::NONE, t_issue);
          }
       }
+      
    }
 
    if (cache_hit)
@@ -1191,6 +1204,7 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
 void
 CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue)
 {
+   //printf("initiateDirectoryAccess called \n");
    bool exclusive = false;
 
    switch (mem_op_type)
@@ -1356,11 +1370,13 @@ CacheCntlr::accessCache(
          m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length,
                                              getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), update_replacement);
          // Write-through cache - Write the next level cache also
-         if (m_cache_writethrough) {
+         if (m_cache_writethrough) 
+         {
             LOG_ASSERT_ERROR(m_next_cache_cntlr, "Writethrough enabled on last-level cache !?");
-MYLOG("writethrough start");
+            MYLOG("writethrough start");
+            //printf("writeCacheBlock called inside accessCache at line 1376 \n");  //sn
             m_next_cache_cntlr->writeCacheBlock(ca_address, offset, data_buf, data_length, ShmemPerfModel::_USER_THREAD);
-MYLOG("writethrough done");
+            MYLOG("writethrough done");
          }
          break;
 
@@ -1432,29 +1448,76 @@ CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::T
  * cache block operations that update the previous level(s)
  *****************************************************************************/
 
-SharedCacheBlockInfo*
-CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, core_id_t requester, ShmemPerfModel::Thread_t thread_num)
+
+
+//////////////////created by Arindam//////////////////////sn
+void 
+CacheCntlr::updateLoopBitCntlr(IntPtr address, UInt8 loopbit)
 {
-MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
+   m_master->m_cache->updateLoopBitCache(address, loopbit);
+}
+/////////////////////////////////////////////////////////////
+
+SharedCacheBlockInfo*
+CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, core_id_t requester, ShmemPerfModel::Thread_t thread_num, UInt8 write_flag, IntPtr eip)   //sn last two arguments added by arindam. eip is PC
+{
+
+   //printf("l3_hit_flag is %d in insertCacheBlock called by %d \n", write_flag, m_mem_component);   //sn
+
+   //printf("insertCacheBlock called by %d \n", m_mem_component);   //sn
+
+   if((write_flag!=3)&&(m_mem_component==5))
+      printf("l3_hit_flag is %d in insertCacheBlock called by %d \n", write_flag, m_mem_component);   //sn
+
+   //printf("insertCacheBlock is called and eip is: %" PRIxPTR "\n", eip);  //ssn
+
+   if(m_mem_component==5)  //nss
+   {
+      g_NumberOfL3WritesFromDirectory++;  //nss
+      //printf("insertCacheBlock called by %d and g_NumberOfL3WritesFromDirectory is %" PRIu64" \n", m_mem_component, g_NumberOfL3WritesFromDirectory);	//nss
+   }
+     
+
+   MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    bool eviction;
    IntPtr evict_address;
+   UInt32 blockIndex;   //sn copied from anushree
    SharedCacheBlockInfo evict_block_info;
    Byte evict_buf[getCacheBlockSize()];
 
    LOG_ASSERT_ERROR(getCacheState(address) == CacheState::INVALID, "we already have this line, can't add it again");
-
-   if (m_mem_component == MemComponent::L3_CACHE)
+   
+	if (m_mem_component == 5)	//sn: copied from Anushree
    {
-        g_NumberOfL3Write++;
-        getMemoryManager()->incrElapsedTime(m_mem_component,
-                                            CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                            ShmemPerfModel::_USER_THREAD);
+        //g_NumberOfL3Write++;
+        //getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
    }
 
-   m_master->m_cache->insertSingleLine(address, data_buf,
+
+	m_master->m_cache->insertSingleLine(address, data_buf,
          &eviction, &evict_address, &evict_block_info, evict_buf,
-         getShmemPerfModel()->getElapsedTime(thread_num), this);
+         getShmemPerfModel()->getElapsedTime(thread_num), this, m_mem_component, write_flag, eip); //nss eip(PC) added by arindam
+
+   if(m_mem_component==4)  //sn
+   {
+       m_next_cache_cntlr->updateLoopBitCntlr(evict_address, global_loop_bit_writeback); //sn
+   }
+
    SharedCacheBlockInfo* cache_block_info = setCacheState(address, cstate);
+
+
+   if(m_mem_component==5)  //sn: copied from Anushree, added to increment time taken for llc write
+   {
+      blockIndex = m_master->m_cache->getBlockIndex(address);
+      if ((blockIndex >= (STARTING_WAY_TO_SRAM)) && (blockIndex <= (ENDING_WAY_TO_SRAM)))  //SRAM Blocks
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);  
+      else 
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);   
+   }
+
+
+
+
 
    if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
       cache_block_info->setOption(CacheBlockInfo::WARMUP);
@@ -1464,12 +1527,12 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
 
    if (m_next_cache_cntlr && !m_perfect)
       m_next_cache_cntlr->notifyPrevLevelInsert(m_core_id_master, m_mem_component, address);
-MYLOG("insertCacheBlock l%d local done", m_mem_component);
+   MYLOG("insertCacheBlock l%d local done", m_mem_component);
 
 
    if (eviction)
    {
-MYLOG("evicting @%lx", evict_address);
+      MYLOG("evicting @%lx", evict_address);
 
       if (
          !m_next_cache_cntlr // Track at LLC
@@ -1534,12 +1597,19 @@ MYLOG("evicting @%lx", evict_address);
       }
       else if (m_next_cache_cntlr)
       {
-         if (m_cache_writethrough) {
+         if (m_cache_writethrough) 
+         {
             /* If we're a write-through cache the new data is in the next level already */
-         } else {
+         } 
+         else 
+         {
             /* Send dirty block to next level cache. Probably we have an evict/victim buffer to do that when we're idle, so ignore timing */
             if (evict_block_info.getCState() == CacheState::MODIFIED)
+            {
+               //printf("l3_hit_flag is %d in insertCacheBlock called by %d just before writeCacheBlock \n", write_flag, m_mem_component);   //sn
+               //printf("writeCacheBlock called inside insertCacheBlock at line 1603 \n");  //sn
                m_next_cache_cntlr->writeCacheBlock(evict_address, 0, evict_buf, getCacheBlockSize(), thread_num);
+            }
          }
          m_next_cache_cntlr->notifyPrevLevelEvict(m_core_id_master, m_mem_component, evict_address);
       }
@@ -1577,7 +1647,7 @@ MYLOG("evicting @%lx", evict_address);
          if (evict_block_info.getCState() == CacheState::MODIFIED)
          {
             // Send back the data also
-MYLOG("evict FLUSH %lx", evict_address);
+            MYLOG("evict FLUSH %lx", evict_address);
             getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP,
                   MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
                   m_core_id /* requester */,
@@ -1588,7 +1658,7 @@ MYLOG("evict FLUSH %lx", evict_address);
          }
          else
          {
-MYLOG("evict INV %lx", evict_address);
+            MYLOG("evict INV %lx", evict_address);
             LOG_ASSERT_ERROR(evict_block_info.getCState() == CacheState::SHARED || evict_block_info.getCState() == CacheState::EXCLUSIVE,
                   "evict_address(0x%x), evict_state(%u)",
                   evict_address, evict_block_info.getCState());
@@ -1607,6 +1677,10 @@ MYLOG("evict INV %lx", evict_address);
    }
 
    MYLOG("insertCacheBlock l%d end", m_mem_component);
+   //////////////////////////////////////
+   //if(m_mem_component==4)
+   //	m_next_cache_cntlr->invalidateCacheBlock(address);
+   /////////////////////////////////////
    return cache_block_info;
 }
 
@@ -1631,8 +1705,11 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
          // writeback_time is for the complete stack, so only model it at the last level, ignore latencies returned by previous ones
          //latency = getMax<SubsecondTime>(latency, res.first);
          sibling_hit |= res.second;
+       
       }
    }
+
+   
 
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
    __attribute__((unused)) CacheState::cstate_t old_cstate = cache_block_info ? cache_block_info->getCState() : CacheState::INVALID;
@@ -1686,28 +1763,37 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
          }
       }
 
-      if (cache_block_info->getCState() == CacheState::MODIFIED) {
+      if (cache_block_info->getCState() == CacheState::MODIFIED) 
+      {
          /* data is modified, write it back */
 
-         if (m_cache_writethrough) {
+         if (m_cache_writethrough) 
+         {
             /* next level already has the data */
 
-         } else if (m_next_cache_cntlr) {
+         } 
+         else if (m_next_cache_cntlr) 
+         {
             /* write straight into the next level cache */
             Byte data_buf[getCacheBlockSize()];
             retrieveCacheBlock(address, data_buf, thread_num, false);
+            //printf("writeCacheBlock called inside updateCacheBlock at line 1770 \n");  //sn
             m_next_cache_cntlr->writeCacheBlock(address, 0, data_buf, getCacheBlockSize(), thread_num);
             is_writeback = true;
             sibling_hit = true;
 
-         } else if (out_buf) {
+         } 
+         else if (out_buf) 
+         {
             /* someone (presumably the directory interfacing code) is waiting to consume the data */
             retrieveCacheBlock(address, out_buf, thread_num, false);
             buf_written = true;
             is_writeback = true;
             sibling_hit = true;
 
-         } else {
+         } 
+         else 
+         {
             /* no-one will take my data !? */
             LOG_ASSERT_ERROR( cache_block_info->getCState() != CacheState::MODIFIED, "MODIFIED data is about to get lost!");
 
@@ -1778,25 +1864,45 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
 void
 CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length, ShmemPerfModel::Thread_t thread_num)
 {
-MYLOG(" ");
+	MYLOG(" ");
 
+   ////////////////////L3 writeback latency taken care off here [ARINDAM]/////////////////////////////////////////////////////////
+   UInt32 blockIndex;   //sn copied from anushree
+   
+   if(m_mem_component==5)  //sn: copied from Anushree, added to increment time taken for llc write
+   {
+      g_NumberOfL3WritesDueToWriteBack++; //nss
+      blockIndex = m_master->m_cache->getBlockIndex(address);
+      if ((blockIndex >= (STARTING_WAY_TO_SRAM)) && (blockIndex <= (ENDING_WAY_TO_SRAM)))  //SRAM Blocks
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);  
+      else 
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);   
+   }
+   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////   
+
+   //printf("writeCacheBlock called by %d \n", m_mem_component); //nss   
    // TODO: should we update access counter?
 
-   if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) {
+   if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) 
+   {
       MYLOG("writing to evict buffer %lx", address);
-assert(offset==0);
-assert(data_length==getCacheBlockSize());
+	   assert(offset==0);
+	   assert(data_length==getCacheBlockSize());
       if (data_buf)
          memcpy(m_master->m_evicting_buf + offset, data_buf, data_length);
-   } else {
+   } 
+   else 
+   {
       __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
          address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime(thread_num), false);
       LOG_ASSERT_ERROR(cache_block_info, "writethrough expected a hit at next-level cache but got miss");
       LOG_ASSERT_ERROR(cache_block_info->getCState() == CacheState::MODIFIED, "Got writeback for non-MODIFIED line");
    }
 
-   if (m_cache_writethrough) {
+   if (m_cache_writethrough) 
+   {
       acquireStackLock(true);
+      //printf("writeCacheBlock called inside writeCacheBlock at line 1887 \n");  //sn
       m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length, thread_num);
       releaseStackLock(true);
    }
@@ -1824,7 +1930,7 @@ CacheCntlr::incrementQBSLookupCost()
    atomic_add_subsecondtime(stats.qbs_query_latency, latency);
 }
 
-#if 0
+#if 0		//sn: following block added from anushree
 void
 CacheCntlr::incrementWriteToSTTRAMCost()
 {
@@ -1963,7 +2069,10 @@ MYLOG("processExRepFromDramDirectory l%d", m_mem_component);
    IntPtr address = shmem_msg->getAddress();
    Byte* data_buf = shmem_msg->getDataBuf();
 
-   insertCacheBlock(address, CacheState::EXCLUSIVE, data_buf, requester, ShmemPerfModel::_SIM_THREAD);
+   //printf("insertCacheBlock called in line 2041 \n");  //ssn
+   insertCacheBlock(address, CacheState::EXCLUSIVE, data_buf, requester, ShmemPerfModel::_SIM_THREAD, 3, eip_global);	//this insertCacheBlock is called after initiateDirectoryAccess. write_flag 3 indicates LLC insertion from dram directory
+   eip_global=0; //sn reset eip global to 0
+
 MYLOG("processExRepFromDramDirectory l%d end", m_mem_component);
 }
 
@@ -1978,7 +2087,8 @@ MYLOG("processShRepFromDramDirectory l%d", m_mem_component);
    Byte* data_buf = shmem_msg->getDataBuf();
 
    // Insert Cache Block in L2 Cache
-   insertCacheBlock(address, CacheState::SHARED, data_buf, requester, ShmemPerfModel::_SIM_THREAD);
+   //printf("insertCacheBlock called in line 2059 \n");  //ssn
+   insertCacheBlock(address, CacheState::SHARED, data_buf, requester, ShmemPerfModel::_SIM_THREAD, 3, eip_global_2);	//this insertCacheBlock is called after initiateDirectoryAccess. write_flag 3 indicates LLC insertion from dram directory
 }
 
 void
@@ -2065,7 +2175,6 @@ MYLOG("processFlushReqFromDramDirectory l%d", m_mem_component);
       shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
 
       // Update Shared Mem perf counters for access to L2 Cache
-      /* Not sure, if we have to modify here also */
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_SIM_THREAD);
 
       // Flush the line
@@ -2103,7 +2212,6 @@ MYLOG("processWbReqFromDramDirectory l%d", m_mem_component);
       shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
 
       // Update Shared Mem perf counters for access to L2 Cache
-      /* Not sure, if we have to modify here also */
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_SIM_THREAD);
 
       // Write-Back the line
@@ -2157,11 +2265,6 @@ CacheCntlr::updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cach
          stats.stores_prefetch++;
       if (isPrefetch != Prefetch::OWN)
       {
-         if (m_mem_component == MemComponent::L3_CACHE)
-         {
-            gLLCStore1++;
-         }
-
          stats.stores++;
          stats.stores_state[state]++;
          if (! cache_hit || overlapping) {
@@ -2381,3 +2484,4 @@ CacheCntlr::getNetworkThreadSemaphore()
 }
 
 }
+
