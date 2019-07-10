@@ -4,8 +4,6 @@
 
 // Cache class
 // constructors/destructors
-
-
 Cache::Cache(
    String name,
    String cfgname,
@@ -97,7 +95,6 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
 
    CacheSet* set = m_sets[set_index];
    CacheBlockInfo* cache_block_info = set->find(tag, &line_index);
-   //printf("set_index printed in accessSingleLine is %d \n", set_index); //ns
 
    if (cache_block_info == NULL)
       return NULL;
@@ -108,11 +105,11 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
       if (m_fault_injector)
          m_fault_injector->preRead(addr, set_index * m_associativity + line_index, bytes, (Byte*)m_sets[set_index]->getDataPtr(line_index, block_offset), now);
 
-      set->read_line(line_index, block_offset, buff, bytes, update_replacement, set_index);
+      set->read_line(line_index, block_offset, buff, bytes, update_replacement);
    }
    else
    {
-      set->write_line(line_index, block_offset, buff, bytes, update_replacement, set_index);
+      set->write_line(line_index, block_offset, buff, bytes, update_replacement);
 
       // NOTE: assumes error occurs in memory. If we want to model bus errors, insert the error into buff instead
       if (m_fault_injector)
@@ -126,19 +123,18 @@ void
 Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
       bool* eviction, IntPtr* evict_addr,
       CacheBlockInfo* evict_block_info, Byte* evict_buff,
-      SubsecondTime now, CacheCntlr *cntlr, int mcomponent, UInt8 write_flag, IntPtr eip) //nss; int mcomponent and write_flag and eip argument has been added by ARINDAM. Remove if necessary
+      SubsecondTime now, CacheCntlr *cntlr)
 {
    IntPtr tag;
    UInt32 set_index;
-   splitAddress(addr, tag, set_index);  
-   
-   //printf("set_index inside insertSingleLine is %d \n", set_index);  //ns
+   splitAddress(addr, tag, set_index);
+
    CacheBlockInfo* cache_block_info = CacheBlockInfo::create(m_cache_type);
    cache_block_info->setTag(tag);
 
-   m_sets[set_index]->insert2(cache_block_info, fill_buff,  //sn insert2 function is insert with additional argument
-         eviction, evict_block_info, evict_buff, cntlr, write_flag, eip, set_index); //cache_block_info is inserted in required place, and the block which is evicted is copied in evict_block_info [ARINDAM], also write_flag and eip added
-   *evict_addr = tagToAddress(evict_block_info->getTag()); //evict_addr is the address of the block which was evicted due to insert [ARINDAM]
+   m_sets[set_index]->insert(cache_block_info, fill_buff,
+         eviction, evict_block_info, evict_buff, cntlr);
+   *evict_addr = tagToAddress(evict_block_info->getTag());
 
    if (m_fault_injector) {
       // NOTE: no callback is generated for read of evicted data
@@ -156,19 +152,6 @@ Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
    delete cache_block_info;
 }
 
-///////////////created by Arindam////////////sn
-void
-Cache::updateLoopBitCache(IntPtr addr, UInt8 loopbit)
-{
-   IntPtr tag;
-   UInt32 set_index;
-   splitAddress(addr, tag, set_index);
-   //printf("\n**********start*************\n");  //sn
-   //printf("set_index is %d and tag is  %" PRIxPTR "(printed in updateLoopBitCache)\n", set_index, tag);  //sn
-   m_sets[set_index]->updateLoopBitSet(tag, loopbit);
-   
-}
-///////////////////////////////////////////////
 
 // Single line cache access at addr
 CacheBlockInfo*
@@ -200,20 +183,4 @@ Cache::updateHits(Core::mem_op_t mem_op_type, UInt64 hits)
       m_num_accesses += hits;
       m_num_hits += hits;
    }
-}
-
-UInt32
-Cache::getBlockIndex(IntPtr addr)   //sn copied from anushree
-{
-    IntPtr tag;
-    UInt32 set_index;
-    UInt32 blockIndex;
-
-    splitAddress(addr, tag, set_index);
-
-    // CacheBlockInfo* cache_block_info = CacheBlockInfo::create(m_cache_type);
-    blockIndex = m_sets[set_index]->getBlockIndexForGivenTag(tag);
-    //printf("blockIndex is %d \n", blockIndex);
-
-    return blockIndex;
 }
