@@ -12,12 +12,23 @@
 
 #include <cstring>
 
-static UInt64 g_NumberOfL3Write;
-static UInt64 g_NumberOfL3Read;
-static UInt64 g_NumberOfL3Access;
-static UInt64 g_NumberOfL3Misses;
-static UInt64 gLLCStore2;
-static UInt64 gLLCStore1;
+/* Accounts for blocks inserted into LLC from DRAM */
+static UInt64 g_NumberOfL3Inserts;
+static UInt64 g_NumberOfL3Stores;
+static UInt64 g_NumberOfL3StoreMiss;
+
+static UInt64 g_NumberOfL3LoadHits;
+static UInt64 g_NumberOfL3StoreHits;
+
+static UInt64 gLLCStore;
+static UInt64 gLLCLoads;
+static UInt64 g_timeSTTRAM;
+static UInt64 g_costSTTRAM;
+
+/* If the flag is true, it indicates that a block from LLC is getting evicted.
+ * In such a case, there is not need account for write to LLC (LLC being STTRAM)
+ */
+#define WAYS_TO_SRAM    4
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -223,13 +234,17 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 
    bzero(&stats, sizeof(stats));
 
-   registerStatsMetric(name, core_id, "NumberOfL3Write",  &g_NumberOfL3Write);
-   registerStatsMetric(name, core_id, "NumberOfL3Read",   &g_NumberOfL3Read);
-   registerStatsMetric(name, core_id, "NumberOfL3Access", &g_NumberOfL3Access);
-   registerStatsMetric(name, core_id, "NumberOfL3Misses", &g_NumberOfL3Misses);
+   registerStatsMetric(name, core_id, "NumberOfL3Inserts",  &g_NumberOfL3Inserts);
+   registerStatsMetric(name, core_id, "NumberOfL3Stores", &g_NumberOfL3Stores);
+   registerStatsMetric(name, core_id, "NumberOfL3LoadHits", &g_NumberOfL3LoadHits);
+   registerStatsMetric(name, core_id, "NumberOfL3StoreHits", &g_NumberOfL3StoreHits);
+   registerStatsMetric(name, core_id, "NumberOfL3StoreMiss", &g_NumberOfL3StoreMiss);
 
-   registerStatsMetric(name, core_id, "LLCStore1", &gLLCStore1);
-   registerStatsMetric(name, core_id, "LLCStore2", &gLLCStore2);
+
+   registerStatsMetric(name, core_id, "LLCStore",  &gLLCStore);
+   registerStatsMetric(name, core_id, "LLCLoads",  &gLLCLoads);
+
+   registerStatsMetric(name, core_id, "timeSTTRAM", &g_timeSTTRAM);
 
    registerStatsMetric(name, core_id, "loads", &stats.loads);
    registerStatsMetric(name, core_id, "stores", &stats.stores);
@@ -413,7 +428,7 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
    if (cache_hit)
    {
 MYLOG("L1 hit");
-      /* For L1 cache. So, will remain same even for Hybrid Cache */  
+      /* For L1 cache. So, will remain same even for Hybrid Cache */
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
 
@@ -604,13 +619,9 @@ MYLOG("access done");
       #endif
 
       if (mem_op_type == Core::WRITE)
-      {
          stats.stores_where[hit_where]++;
-      }
       else
-      {
          stats.loads_where[hit_where]++;
-      }
    }
 
 
@@ -825,20 +836,54 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if (isPrefetch == Prefetch::NONE)
          getCache()->updateCounters(cache_hit);
       updateCounters(mem_op_type, address, cache_hit, getCacheState(address), isPrefetch);
-    
-      /* Accounting for store */
+
+      /* Accounting for stores which write to L3. Stores which miss in LLC, will be
+       * accounted for when these missed blocks are inserted from DRAM */
       if ((mem_op_type == Core::WRITE)
       &&  (m_mem_component == MemComponent::L3_CACHE))
       {
-            gLLCStore2++;
-            //SubsecondTime time1 = getMemoryManager()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-            getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                                ShmemPerfModel::_USER_THREAD);
-            //SubsecondTime time2 = getMemoryManager()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-            //printf("%lu:time1(%s) time2(%s) diff:%s\n", gLLCStore2, itostr(time1).c_str(),
-            //                                            itostr(time2).c_str(),
-            //                                            itostr(time2-time1).c_str());
+            /* Acounting for stores to LLC */
+            /* Since in case of Hybrid cache, only L3 cache has different
+             * read/write latencies. For L3 cache consisting for STTRAM,
+             * it will have different (larger write) latencies */
+            g_NumberOfL3Stores++;
+
+            if (cache_hit)
+            {
+                g_NumberOfL3StoreHits++;
+
+                UInt32 blockIndex = m_master->m_cache->getBlockIndex(address);
+
+                //if index is 0,1,2,3,4 it is SRAM block, else STTRAM block
+                if (blockIndex <= (WAYS_TO_SRAM - 1))
+                {
+                    getMemoryManager()->incrElapsedTime(m_mem_component,
+                                                        CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
+                                                        ShmemPerfModel::_USER_THREAD);
+                }
+                else if (blockIndex > (WAYS_TO_SRAM - 1))
+                {
+                    getMemoryManager()->incrElapsedTime(m_mem_component,
+                                                        CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
+                                                        ShmemPerfModel::_USER_THREAD);
+                }
+
+                SubsecondTime cost = getMemoryManager()->getCost(m_mem_component,
+                                     CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS);
+
+                g_costSTTRAM = std::stoi(itostr(cost).c_str());
+                g_timeSTTRAM += g_costSTTRAM;
+           }
+      }
+
+      if ((mem_op_type == Core::READ)
+      &&  (m_mem_component == MemComponent::L3_CACHE))
+      {
+          gLLCLoads++;
+          if (cache_hit)
+          {
+              g_NumberOfL3LoadHits++;
+          }
       }
    }
 
@@ -851,6 +896,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          prefetch_hit = true;
          cache_block_info->clearOption(CacheBlockInfo::PREFETCH);
       }
+
       if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && Sim()->getInstrumentationMode() != InstMode::CACHE_ONLY)
       {
          stats.hits_warmup++;
@@ -858,8 +904,8 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       }
 
       // Increment Shared Mem Perf model cycle counts
-      /****** TODO: for the last-level cache, this is also done by the network thread when the message comes in.
-                    we probably shouldn't do this twice */
+      /* TODO: for the last-level cache, this is also done by the network thread
+      when the message comes in. we probably shouldn't do this twice */
       /* TODO: if we end up getting the data from a sibling cache, the access time might be only that
          of the previous-level cache, not our (longer) access time */
       if (modeled)
@@ -883,29 +929,15 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                 getMemoryManager()->incrElapsedTime(m_mem_component,
                                                     CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
                                                     ShmemPerfModel::_USER_THREAD);
-                g_NumberOfL3Read++;
             }
-            #if 0
             else if (mem_op_type == Core::WRITE)
             {
-                /* Since in case of Hybrid cache, only L3 cache has different
-                 * read/write latencies. For L3 cache consisting for STTRAM,
-                 * it will have different (larger write) latencies */
-                if (m_mem_component == MemComponent::L3_CACHE)
-                {
-                    g_NumberOfL3Write++;
-                    getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                        CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                                        ShmemPerfModel::_USER_THREAD);
-                }
-                else
                 {
                     getMemoryManager()->incrElapsedTime(m_mem_component,
                                                         CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
                                                         ShmemPerfModel::_USER_THREAD);
                 }
             }
-            #endif
          }
       }
 
@@ -919,6 +951,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
                latency = getMax<SubsecondTime>(latency, res.first);
+
                sibling_hit |= res.second;
             }
          }
@@ -1026,6 +1059,8 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             #endif
 
             cache_hit = true;
+
+            g_NumberOfL3StoreMiss++;
             hit_where = HitWhere::where_t(m_mem_component);
             MYLOG("Silent upgrade from E -> M for address %lx", address);
             cache_block_info->setCState(CacheState::MODIFIED);
@@ -1431,13 +1466,13 @@ CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::T
 /*****************************************************************************
  * cache block operations that update the previous level(s)
  *****************************************************************************/
-
 SharedCacheBlockInfo*
 CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, core_id_t requester, ShmemPerfModel::Thread_t thread_num)
 {
 MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    bool eviction;
    IntPtr evict_address;
+   UInt32 blockIndex;
    SharedCacheBlockInfo evict_block_info;
    Byte evict_buf[getCacheBlockSize()];
 
@@ -1445,16 +1480,38 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
 
    if (m_mem_component == MemComponent::L3_CACHE)
    {
-        g_NumberOfL3Write++;
-        getMemoryManager()->incrElapsedTime(m_mem_component,
-                                            CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                            ShmemPerfModel::_USER_THREAD);
+        g_NumberOfL3Inserts++;
+        SubsecondTime cost = getMemoryManager()->getCost(m_mem_component,
+                             CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS);
+        g_costSTTRAM = std::stoi(itostr(cost).c_str());
+        g_timeSTTRAM += g_costSTTRAM;
    }
 
    m_master->m_cache->insertSingleLine(address, data_buf,
          &eviction, &evict_address, &evict_block_info, evict_buf,
          getShmemPerfModel()->getElapsedTime(thread_num), this);
    SharedCacheBlockInfo* cache_block_info = setCacheState(address, cstate);
+
+   if (m_mem_component == MemComponent::L3_CACHE)
+   {
+       blockIndex = m_master->m_cache->getBlockIndex(address);
+       //printf("Index:%s\n", itostr(blockIndex).c_str());
+
+       /* if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block */
+       if (blockIndex <= (WAYS_TO_SRAM - 1))
+       {
+           getMemoryManager()->incrElapsedTime(m_mem_component,
+                                               CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
+                                               ShmemPerfModel::_USER_THREAD);
+       }
+       else if (blockIndex > (WAYS_TO_SRAM - 1))
+       {
+           //printf("Index:%s\n", itostr(blockIndex).c_str());
+           getMemoryManager()->incrElapsedTime(m_mem_component,
+                                               CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
+                                               ShmemPerfModel::_USER_THREAD);
+       }
+   }
 
    if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
       cache_block_info->setOption(CacheBlockInfo::WARMUP);
@@ -1631,8 +1688,11 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
          // writeback_time is for the complete stack, so only model it at the last level, ignore latencies returned by previous ones
          //latency = getMax<SubsecondTime>(latency, res.first);
          sibling_hit |= res.second;
+
       }
    }
+
+
 
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
    __attribute__((unused)) CacheState::cstate_t old_cstate = cache_block_info ? cache_block_info->getCState() : CacheState::INVALID;
@@ -1780,8 +1840,6 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
 {
 MYLOG(" ");
 
-   // TODO: should we update access counter?
-
    if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) {
       MYLOG("writing to evict buffer %lx", address);
 assert(offset==0);
@@ -1824,15 +1882,15 @@ CacheCntlr::incrementQBSLookupCost()
    atomic_add_subsecondtime(stats.qbs_query_latency, latency);
 }
 
-#if 0
-void
+
+/*void
 CacheCntlr::incrementWriteToSTTRAMCost()
 {
    SubsecondTime latency = m_data_write_time.getLatency();
    getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
    atomic_add_subsecondtime(stats.snoop_latency, latency);
-}
-#endif
+}*/
+
 
 /*****************************************************************************
  * handle messages from directory (in network thread)
@@ -2066,7 +2124,12 @@ MYLOG("processFlushReqFromDramDirectory l%d", m_mem_component);
 
       // Update Shared Mem perf counters for access to L2 Cache
       /* Not sure, if we have to modify here also */
+
+
+
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_SIM_THREAD);
+
+
 
       // Flush the line
       Byte data_buf[getCacheBlockSize()];
@@ -2104,7 +2167,10 @@ MYLOG("processWbReqFromDramDirectory l%d", m_mem_component);
 
       // Update Shared Mem perf counters for access to L2 Cache
       /* Not sure, if we have to modify here also */
-      getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_SIM_THREAD);
+
+
+      getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_SIM_THREAD);  //newchange
+
 
       // Write-Back the line
       Byte data_buf[getCacheBlockSize()];
@@ -2159,7 +2225,7 @@ CacheCntlr::updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cach
       {
          if (m_mem_component == MemComponent::L3_CACHE)
          {
-            gLLCStore1++;
+            gLLCStore++;
          }
 
          stats.stores++;

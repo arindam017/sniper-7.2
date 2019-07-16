@@ -242,3 +242,24 @@ bool CacheSet::isValidReplacement(UInt32 index)
       return true;
    }
 }
+
+UInt32
+CacheSet::getBlockIndexForGivenTag(IntPtr tagToFind)
+{
+    SInt32 blockIndex = -1;
+    IntPtr tagInSet;
+
+    for (SInt32 index = m_associativity - 1; index >= 0; index--)
+    {
+        tagInSet = m_cache_block_info_array[index]->getTag();
+        if (tagInSet == tagToFind)
+        {
+            blockIndex = index;
+            //printf("Tag1:0x%lx Tag2:0x%lx\n", tagInSet, tagToFind);
+            break;
+        }
+    }
+
+    assert(blockIndex != -1);
+    return blockIndex;
+}
