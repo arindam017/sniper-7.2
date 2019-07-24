@@ -5,10 +5,10 @@ so all other folders and files have been ignored (as can be seen in .gitignore f
 2. So, after cloning the repo, add following folders in the repo from latest sniper7.2
 version
 **Files/Folders to be added**:
-    decoder_lib
-    docker
-    frontend
-    include
+    * decoder_lib
+    * docker
+    * frontend
+    * include
     lib
     Makefile
     Makefile.config
