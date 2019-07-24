@@ -60,7 +60,8 @@ class CacheBase
          SRRIP,
          SRRIP_QBS,
          RANDOM,
-         NUM_REPLACEMENT_POLICIES
+         NUM_REPLACEMENT_POLICIES,
+         PHC
       };
 
    protected:

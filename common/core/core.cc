@@ -362,13 +362,16 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
       if (m_cheetah_manager)
          m_cheetah_manager->access(mem_op_type, curr_addr_aligned);
 
+
+
       HitWhere::where_t this_hit_where = getMemoryManager()->coreInitiateMemoryAccess(
                mem_component,
                lock_signal,
                mem_op_type,
                curr_addr_aligned, curr_offset,
                data_buf ? curr_data_buffer_head : NULL, curr_size,
-               modeled);
+               modeled,
+               eip); //sn last argument added by arindam. it is the PC 
 
       if (hit_where != (HitWhere::where_t)mem_component)
       {
