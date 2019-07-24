@@ -205,6 +205,10 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     for c in range(ncores)
   ]
 
+  results['L2.NumberL2WritebacksToL3'] = [results['L2.NumberL2WritebacksToL3'][c]
+    for c in range(ncores)
+  ]
+
   template += [
     ('  LLC Stats', '', '',),
   ]
@@ -223,6 +227,7 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   ('    Stores', 'L3.NumberOfL3Stores', str),
   ('    StoreHits', 'L3.NumberOfL3StoreHits', str),
   ('    StoreMiss', 'L3.NumberOfL3StoreMiss', str),
+  ('    Writebacks: L2->>L3', 'L2.NumberL2WritebacksToL3', str),
   ('    Insert: DRAM to LLC', 'L3.NumberOfL3Inserts', str),
   ('    Store (UpdateCounter)', 'L3.LLCStore', str),
   ])

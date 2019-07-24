@@ -25,6 +25,8 @@ static UInt64 gLLCLoads;
 static UInt64 g_timeSTTRAM;
 static UInt64 g_costSTTRAM;
 
+static UInt64 g_NumberL2WritebacksToL3;
+
 /* If the flag is true, it indicates that a block from LLC is getting evicted.
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
  */
@@ -239,7 +241,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "NumberOfL3LoadHits", &g_NumberOfL3LoadHits);
    registerStatsMetric(name, core_id, "NumberOfL3StoreHits", &g_NumberOfL3StoreHits);
    registerStatsMetric(name, core_id, "NumberOfL3StoreMiss", &g_NumberOfL3StoreMiss);
-
+   registerStatsMetric(name, core_id, "NumberL2WritebacksToL3", &g_NumberL2WritebacksToL3);
 
    registerStatsMetric(name, core_id, "LLCStore",  &gLLCStore);
    registerStatsMetric(name, core_id, "LLCLoads",  &gLLCLoads);
@@ -1591,13 +1593,28 @@ MYLOG("evicting @%lx", evict_address);
       }
       else if (m_next_cache_cntlr)
       {
-         if (m_cache_writethrough) {
+         if (m_cache_writethrough)
+         {
             /* If we're a write-through cache the new data is in the next level already */
-         } else {
-            /* Send dirty block to next level cache. Probably we have an evict/victim buffer to do that when we're idle, so ignore timing */
-            if (evict_block_info.getCState() == CacheState::MODIFIED)
-               m_next_cache_cntlr->writeCacheBlock(evict_address, 0, evict_buf, getCacheBlockSize(), thread_num);
          }
+         else
+         {
+            /* Send dirty block to next level cache. Probably we have an
+             * evict/victim buffer to do that when we're idle, so ignore timing */
+            if (evict_block_info.getCState() == CacheState::MODIFIED)
+            {
+               m_next_cache_cntlr->writeCacheBlock(evict_address, 0, evict_buf,
+                                                   getCacheBlockSize(), thread_num);
+
+               if (m_mem_component == MemComponent::L2_CACHE)
+               {
+                   /* To count number of writebacks from L2 cache to L3/LLC in a
+                    * writeback cache */
+                   g_NumberL2WritebacksToL3++;
+               }
+            }
+         }
+         
          m_next_cache_cntlr->notifyPrevLevelEvict(m_core_id_master, m_mem_component, evict_address);
       }
       else if (m_master->m_dram_cntlr)
