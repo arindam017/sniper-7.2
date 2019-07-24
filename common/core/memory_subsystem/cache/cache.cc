@@ -194,7 +194,6 @@ Cache::getBlockIndex(IntPtr addr)
 
     splitAddress(addr, tag, set_index);
 
-    // CacheBlockInfo* cache_block_info = CacheBlockInfo::create(m_cache_type);
     blockIndex = m_sets[set_index]->getBlockIndexForGivenTag(tag);
 
     return blockIndex;

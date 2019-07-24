@@ -351,6 +351,8 @@ namespace ParametricDramDirectoryMSI
 
          CacheCntlr* lastLevelCache(void);
 
+         void accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* master);
+
       public:
 
          CacheCntlr(MemComponent::component_t mem_component,

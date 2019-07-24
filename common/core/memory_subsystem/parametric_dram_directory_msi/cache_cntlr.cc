@@ -790,6 +790,24 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
    releaseStackLock(prefetch_address);
 }
 
+void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* master)
+{
+    UInt32 blockIndex = master->m_cache->getBlockIndex(address);
+
+    //if index is 0,1,2,3,4 it is SRAM block, else STTRAM block
+    if (blockIndex <= (WAYS_TO_SRAM - 1))
+    {
+        getMemoryManager()->incrElapsedTime(m_mem_component,
+                                            CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
+                                            ShmemPerfModel::_USER_THREAD);
+    }
+    else if (blockIndex > (WAYS_TO_SRAM - 1))
+    {
+        getMemoryManager()->incrElapsedTime(m_mem_component,
+                                            CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
+                                            ShmemPerfModel::_USER_THREAD);
+    }
+}
 
 /*****************************************************************************
  * operations called by cache on next-level cache
@@ -854,21 +872,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             {
                 g_NumberOfL3StoreHits++;
 
-                UInt32 blockIndex = m_master->m_cache->getBlockIndex(address);
-
-                //if index is 0,1,2,3,4 it is SRAM block, else STTRAM block
-                if (blockIndex <= (WAYS_TO_SRAM - 1))
-                {
-                    getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                        CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
-                                                        ShmemPerfModel::_USER_THREAD);
-                }
-                else if (blockIndex > (WAYS_TO_SRAM - 1))
-                {
-                    getMemoryManager()->incrElapsedTime(m_mem_component,
-                                                        CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                                        ShmemPerfModel::_USER_THREAD);
-                }
+                accountForWriteLatencyOfLLC(address, m_master);
 
                 SubsecondTime cost = getMemoryManager()->getCost(m_mem_component,
                                      CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS);
@@ -1474,7 +1478,6 @@ CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* 
 MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    bool eviction;
    IntPtr evict_address;
-   UInt32 blockIndex;
    SharedCacheBlockInfo evict_block_info;
    Byte evict_buf[getCacheBlockSize()];
 
@@ -1496,23 +1499,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
 
    if (m_mem_component == MemComponent::L3_CACHE)
    {
-       blockIndex = m_master->m_cache->getBlockIndex(address);
-       //printf("Index:%s\n", itostr(blockIndex).c_str());
-
-       /* if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block */
-       if (blockIndex <= (WAYS_TO_SRAM - 1))
-       {
-           getMemoryManager()->incrElapsedTime(m_mem_component,
-                                               CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
-                                               ShmemPerfModel::_USER_THREAD);
-       }
-       else if (blockIndex > (WAYS_TO_SRAM - 1))
-       {
-           //printf("Index:%s\n", itostr(blockIndex).c_str());
-           getMemoryManager()->incrElapsedTime(m_mem_component,
-                                               CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                               ShmemPerfModel::_USER_THREAD);
-       }
+       accountForWriteLatencyOfLLC(address, m_master);
    }
 
    if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
@@ -1611,6 +1598,12 @@ MYLOG("evicting @%lx", evict_address);
                    /* To count number of writebacks from L2 cache to L3/LLC in a
                     * writeback cache */
                    g_NumberL2WritebacksToL3++;
+                   
+                   /* Address is the address of the block which was newly inserted in L2
+                    * and resulted in eviction of dirty block with address evict_address
+                    * from L2 and subsequent writeback in L3. Since, evict_address will
+                    * be there in L3 cache, so we are checking for the evict_address in L3 */
+                   accountForWriteLatencyOfLLC(evict_address, m_next_cache_cntlr->m_master);
                }
             }
          }
