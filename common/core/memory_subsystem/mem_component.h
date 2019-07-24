@@ -14,6 +14,7 @@ class MemComponent
          L1_DCACHE,
          L2_CACHE,
          L3_CACHE,
+        
          L4_CACHE,
          /* more, unnamed stuff follows.
             make sure that MAX_MEM_COMPONENT < 32 as pr_l2_cache_block_info.h contains a 32-bit bitfield of these things

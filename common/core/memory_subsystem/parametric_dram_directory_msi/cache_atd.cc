@@ -34,7 +34,7 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 num_sets, UIn
    {
       for(UInt64 set_index = 0; set_index < num_sets; ++set_index)
       {
-         m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0, m_set_info);
+         m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0,0,m_set_info);
       }
    }
    else if (sampling == "2^n+1")
@@ -42,7 +42,7 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 num_sets, UIn
       // Sample sets at indexes 2^N+1
       for(UInt64 set_index = 1; set_index < num_sets - 1; set_index <<= 1)
       {
-         m_sets[set_index+1] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0, m_set_info);
+         m_sets[set_index+1] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0,0,m_set_info);
       }
    }
    else if (sampling == "random")
@@ -59,7 +59,7 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 num_sets, UIn
          UInt64 set_index = rng_next(state) % num_sets;
          if (m_sets.count(set_index) == 0)
          {
-            m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0, m_set_info);
+            m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0,0,m_set_info);
             --num_atds;
          }
          LOG_ASSERT_ERROR(++num_attempts < 10 * num_sets, "Cound not find unique ATD sets even after many attempts");
@@ -94,7 +94,7 @@ void ATD::access(Core::mem_op_t mem_op_type, bool cache_hit, IntPtr address)
 
       if (atd_hit)
       {
-         m_sets[set_index]->updateReplacementIndex(line_index,100,set_index);
+         m_sets[set_index]->updateReplacementIndex(line_index,100);
       }
       else
       {

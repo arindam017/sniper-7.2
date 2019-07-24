@@ -48,9 +48,7 @@ class MemoryManagerBase
             Core::mem_op_t mem_op_type,
             IntPtr address, UInt32 offset,
             Byte* data_buf, UInt32 data_length,
-            Core::MemModeled modeled,
-            IntPtr eip) = 0;  //sn eip added by arindam
-      
+            Core::MemModeled modeled,IntPtr eip) = 0;
       virtual SubsecondTime coreInitiateMemoryAccessFast(
             bool icache,
             Core::mem_op_t mem_op_type,
@@ -66,8 +64,7 @@ class MemoryManagerBase
                mem_op_type,
                address - (address % getCacheBlockSize()), 0,
                NULL, getCacheBlockSize(),
-               Core::MEM_MODELED_COUNT_TLBTIME,
-               0);   //sn last argument added by arindam. I dont know when this is used, so added 0 as default. No sure
+               Core::MEM_MODELED_COUNT_TLBTIME,0);
 
          // Get the final cycle time
          SubsecondTime final_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);

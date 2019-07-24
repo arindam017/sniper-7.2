@@ -15,6 +15,7 @@ namespace ParametricDramDirectoryMSI
 
          UInt32 m_size;
          UInt32 m_associativity;
+        
          Cache m_cache;
 
          TLB *m_next_level;

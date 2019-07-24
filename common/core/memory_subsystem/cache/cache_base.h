@@ -53,6 +53,7 @@ class CacheBase
          ROUND_ROBIN = 0,
          LRU,
          LRU_QBS,
+         LRU_HYBRID,
          NRU,
          MRU,
          NMRU,
@@ -60,11 +61,8 @@ class CacheBase
          SRRIP,
          SRRIP_QBS,
          RANDOM,
-         NUM_REPLACEMENT_POLICIES,
-         LRU_NEW,
-         LRU_L3,
-         LRU_L2,
-         PHC
+	 PHC,
+         NUM_REPLACEMENT_POLICIES
       };
 
    protected:

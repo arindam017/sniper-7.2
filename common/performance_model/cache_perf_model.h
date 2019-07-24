@@ -10,11 +10,11 @@ class CachePerfModel
       enum CacheAccess_t
       {
          ACCESS_CACHE_DATA_AND_TAGS = 0,
-         ACCESS_CACHE_WRITEDATA_AND_TAGS,//ns
+         ACCESS_CACHE_WRITEDATA_AND_TAGS,
          ACCESS_CACHE_DATA,
          ACCESS_CACHE_TAGS,
-         WRITE_CACHE_DATA,	//ns
-         NUM_CACHE_ACCESS_TYPES
+         NUM_CACHE_ACCESS_TYPES,
+         WRITE_CACHE_DATA
       };
 
       enum PerfModel_t
@@ -30,13 +30,12 @@ class CachePerfModel
       ComponentLatency m_cache_data_write_time;
 
    public:
-      CachePerfModel(const ComponentLatency& cache_data_access_time, const ComponentLatency& cache_tags_access_time,const ComponentLatency& cache_data_write_time);	//sn
+      CachePerfModel(const ComponentLatency& cache_data_access_time, const ComponentLatency& cache_tags_access_time,const ComponentLatency& cache_data_write_time);
       virtual ~CachePerfModel();
 
       static CachePerfModel* create(String cache_perf_model_type,
             const ComponentLatency& cache_data_access_time,
-            const ComponentLatency& cache_tags_access_time,
-            const ComponentLatency& cache_data_write_time);	//sn
+            const ComponentLatency& cache_tags_access_time,const ComponentLatency& cache_data_write_time);
       static PerfModel_t parseModelType(String model_type);
 
       virtual void enable() = 0;

@@ -15,7 +15,8 @@ class HitWhere
          L1I = MemComponent::L1_ICACHE,
          L1_OWN = MemComponent::L1_DCACHE,
          L2_OWN = MemComponent::L2_CACHE,
-         L3_OWN = MemComponent::L3_CACHE,
+         L3_OWN = MemComponent::L3_CACHE,   ///NEWCHANGE
+         
          L4_OWN = MemComponent::L4_CACHE,
          MISS,
          NUCA_CACHE,
@@ -28,6 +29,7 @@ class HitWhere
          L1_SIBLING = MemComponent::L1_DCACHE + SIBLING,
          L2_SIBLING = MemComponent::L2_CACHE + SIBLING,
          L3_SIBLING = MemComponent::L3_CACHE + SIBLING,
+        
          L4_SIBLING = MemComponent::L4_CACHE + SIBLING,
          UNKNOWN,
          PREDICATE_FALSE, // CMOV for which the predicate was false, did not actually execute

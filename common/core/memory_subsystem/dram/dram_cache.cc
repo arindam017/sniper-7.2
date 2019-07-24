@@ -30,7 +30,9 @@ DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
    , m_prefetch_mshr_delay(SubsecondTime::Zero())
 {
    UInt32 cache_size = Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", m_core_id);
-   UInt32 associativity = Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", m_core_id);
+   UInt32 associativity = Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", m_core_id); ///new change
+  // UInt32 number_of_sttram_ways = Sim()->getCfg()->getIntArray("perf_model/dram/cache/number_of_sttram_ways", m_core_id);
+  // UInt32 number_of_sram_ways = Sim()->getCfg()->getIntArray("perf_model/dram/cache/number_of_sram_ways", m_core_id);
    UInt32 num_sets = k_KILO * cache_size / (associativity * m_cache_block_size);
    LOG_ASSERT_ERROR(k_KILO * cache_size == num_sets * associativity * m_cache_block_size, "Invalid cache configuration: size(%d Kb) != sets(%d) * associativity(%d) * block_size(%d)", cache_size, num_sets, associativity, m_cache_block_size);
 
@@ -162,7 +164,7 @@ DramCache::insertLine(Cache::access_t access, IntPtr address, core_id_t requeste
 
    m_cache->insertSingleLine(address, data_buf,
       &eviction, &evict_address, &evict_block_info, evict_buf,
-      now, 0, 100, 0); //nss last 3 values are garbage values
+      now);
    m_cache->peekSingleLine(address)->setCState(access == Cache::STORE ? CacheState::MODIFIED : CacheState::SHARED);
 
    // Write to data array off-line, so don't affect return latency

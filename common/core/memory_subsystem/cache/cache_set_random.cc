@@ -18,7 +18,7 @@ CacheSetRandom::~CacheSetRandom()
 }
 
 UInt32
-CacheSetRandom::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index)
+CacheSetRandom::getReplacementIndex(CacheCntlr *cntlr,IntPtr eip)
 {
    // Invalidations may mess up the LRU bits
 
@@ -36,19 +36,11 @@ CacheSetRandom::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr
    else
    {
       // Could not find valid victim, try again, due to randomness, it might work
-      return getReplacementIndex(cntlr, 100, 0, set_index);
+      return getReplacementIndex(cntlr,0);
    }
 }
 
 void
-CacheSetRandom::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
+CacheSetRandom::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag)
 {
 }
-
-////////////created by Arindam//////////////////sn
-void
-CacheSetRandom::updateLoopBitPolicy(UInt32 index, UInt8 loopbit)
-{
-  
-}
-//////////////////////////////////////////////////

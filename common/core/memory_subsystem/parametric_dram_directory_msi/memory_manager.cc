@@ -105,15 +105,6 @@ MemoryManager::MemoryManager(Core* core,
          int latency = Sim()->getCfg()->getIntArray("perf_model/l3_cache/data_write_time", core->getId());
          printf("L3 data_write_time:%d\n", latency);
 
-         int size = Sim()->getCfg()->getIntArray("perf_model/l3_cache/cache_size", core->getId());
-         printf("L3 cache_size:%d\n", size);
-
-         String policy = Sim()->getCfg()->getStringArray("perf_model/l3_cache/replacement_policy", core->getId());
-         printf("L3 replacement_policy:%s\n", policy.c_str());
-
-         String l2policy = Sim()->getCfg()->getStringArray("perf_model/l2_cache/replacement_policy", core->getId());
-         printf("L2 replacement_policy:%s\n\n", l2policy.c_str());
-
          const ComponentPeriod *clock_domain = NULL;
          String domain_name = Sim()->getCfg()->getStringArray("perf_model/" + configName + "/dvfs_domain", core->getId());
          if (domain_name == "core")
@@ -130,6 +121,7 @@ MemoryManager::MemoryManager(Core* core,
             configName,
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/cache_size", core->getId()),
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/associativity", core->getId()),
+           // Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/no_of_sram_ways", core->getId()),
             getCacheBlockSize(),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/address_hash", core->getId()),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/replacement_policy", core->getId()),
@@ -172,12 +164,13 @@ MemoryManager::MemoryManager(Core* core,
             "nuca",
             Sim()->getCfg()->getIntArray(   "perf_model/nuca/cache_size", core->getId()),
             Sim()->getCfg()->getIntArray(   "perf_model/nuca/associativity", core->getId()),
+           // Sim()->getCfg()->getIntArray(   "perf_model/nuca/no_of_sram_ways", core->getId()),
             getCacheBlockSize(),
             Sim()->getCfg()->getStringArray("perf_model/nuca/address_hash", core->getId()),
             Sim()->getCfg()->getStringArray("perf_model/nuca/replacement_policy", core->getId()),
             false, true,
             ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/data_access_time", core->getId())),
-            ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/data_write_time", core->getId())),	//sn
+            ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/data_write_time", core->getId())),
             ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/tags_access_time", core->getId())),
             ComponentLatency(global_domain, 0), ComponentBandwidthPerCycle(global_domain, 0), "", false, 0, "", 0 // unused
          );
@@ -439,12 +432,8 @@ MemoryManager::coreInitiateMemoryAccess(
       Core::mem_op_t mem_op_type,
       IntPtr address, UInt32 offset,
       Byte* data_buf, UInt32 data_length,
-      Core::MemModeled modeled,
-      IntPtr eip)
+      Core::MemModeled modeled,IntPtr eip)
 {
-
-   //printf("coreInitiateMemoryAccess is called and eip is: %" PRIxPTR "\n", eip);  //ssn
-
    LOG_ASSERT_ERROR(mem_component <= m_last_level_cache,
       "Error: invalid mem_component (%d) for coreInitiateMemoryAccess", mem_component);
 
@@ -459,8 +448,7 @@ MemoryManager::coreInitiateMemoryAccess(
          address, offset,
          data_buf, data_length,
          modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
-         modeled == Core::MEM_MODELED_NONE ? false : true,
-         eip); //sn eip added by arindam. it has PC of instruction
+         modeled == Core::MEM_MODELED_NONE ? false : true,eip);
 }
 
 void
@@ -636,7 +624,16 @@ MemoryManager::getCost(MemComponent::component_t mem_component, CachePerfModel::
    if (mem_component == MemComponent::INVALID_MEM_COMPONENT)
       return SubsecondTime::Zero();
 
-   return m_cache_perf_models[mem_component]->getLatency(access_type);
+   SubsecondTime latency = m_cache_perf_models[mem_component]->getLatency(access_type);
+   
+   #if 0
+   if (MemComponent::L3_CACHE == mem_component)
+   {
+        printf("[Newton] L3 cycles = %s\n", itostr(latency).c_str());
+   }
+   #endif
+   
+   return latency;
 }
 
 void
@@ -647,7 +644,7 @@ MemoryManager::incrElapsedTime(SubsecondTime latency, ShmemPerfModel::Thread_t t
 }
 
 SubsecondTime
-MemoryManager::getElapsedTime(ShmemPerfModel::Thread_t thread_num)	//sn; added from Anushree's files
+MemoryManager::getElapsedTime(ShmemPerfModel::Thread_t thread_num)
 {
    return getShmemPerfModel()->getElapsedTime(thread_num);
 }

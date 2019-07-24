@@ -3,10 +3,10 @@
 #include "cache_perf_model_sequential.h"
 #include "log.h"
 
-CachePerfModel::CachePerfModel(const ComponentLatency& cache_data_access_time, const ComponentLatency& cache_tags_access_time,const ComponentLatency& cache_data_write_time): //sn;cache_data_write_time added from Anushree's files
+CachePerfModel::CachePerfModel(const ComponentLatency& cache_data_access_time, const ComponentLatency& cache_tags_access_time,const ComponentLatency& cache_data_write_time):
    m_cache_data_access_time(cache_data_access_time),
    m_cache_tags_access_time(cache_tags_access_time),
-   m_cache_data_write_time(cache_data_write_time)	//sn; added from Anushree's files
+   m_cache_data_write_time(cache_data_write_time)
 {}
 
 CachePerfModel::~CachePerfModel()
@@ -14,17 +14,17 @@ CachePerfModel::~CachePerfModel()
 
 CachePerfModel*
 CachePerfModel::create(String cache_perf_model_type,
-      const ComponentLatency& cache_data_access_time, const ComponentLatency& cache_tags_access_time, const ComponentLatency& cache_data_write_time)	//sn;cache_data_write_time added from Anushree's files
+      const ComponentLatency& cache_data_access_time, const ComponentLatency& cache_tags_access_time, const ComponentLatency& cache_data_write_time)
 {
    PerfModel_t perf_model = parseModelType(cache_perf_model_type);
 
    switch(perf_model)
    {
       case(CACHE_PERF_MODEL_PARALLEL):
-         return new CachePerfModelParallel(cache_data_access_time, cache_tags_access_time,cache_data_write_time);	//sn;cache_data_write_time added from Anushree's files
+         return new CachePerfModelParallel(cache_data_access_time, cache_tags_access_time,cache_data_write_time);
 
       case(CACHE_PERF_MODEL_SEQUENTIAL):
-         return new CachePerfModelSequential(cache_data_access_time, cache_tags_access_time,cache_data_write_time);	//sn;cache_data_write_time added from Anushree's files
+         return new CachePerfModelSequential(cache_data_access_time, cache_tags_access_time,cache_data_write_time);
 
       default:
          LOG_ASSERT_ERROR(false, "Unsupported CachePerfModel type: %s", cache_perf_model_type.c_str());
