@@ -113,3 +113,12 @@ CacheSetPLRU::updateReplacementIndex(UInt32 accessed_index,  UInt8 write_flag, U
       LOG_PRINT_ERROR("PLRU doesn't support associativity %d", m_associativity);
    }
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+//created by arindam to pass writeback information to policy files (required in phc)
+void
+CacheSetPLRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
+{
+
+}
+///////////////////////////////////////////////////////////////////////////////////////////////

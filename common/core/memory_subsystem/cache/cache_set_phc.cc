@@ -2,17 +2,18 @@
 #include "log.h"
 #include "stats.h"
 
-// Implements LRU replacement, optionally augmented with Query-Based Selection [Jaleel et al., MICRO'10]
+
 UInt8 cost_threshold = 20;
 UInt8 Ew=24;
-UInt8 Er=-1;
+UInt8 Er=1;
 UInt16 predictor_table_length=256;
 UInt8 state_threshold=2;
 UInt8 state_max=3;
 UInt8 SRAM_ways=4;
-//UInt32 counter=0;
 UInt32 number_of_sets = 8192;
 UInt32 sampler_fraction = 32;
+
+extern UInt64 globalWritebacksToL3counter;   //this is a global counter. this counter will be reset when updateReplacementindex for phc in LLC is called 
 
 
 
@@ -59,20 +60,19 @@ CacheSetPHC::~CacheSetPHC()
 UInt32
 CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index)
 {
+   //printf("\ngetReplacementIndex called in l3 \n");
    UInt16 eip_truncated=eip%256;  //truncating eip to last 12bits
 
-   //printf("set_index inside getReplacementIndex is %d \n", set_index);  //ns
    if ((set_index % sampler_fraction)==0) //sampler set
    {
-      //printf("sampler set \n");   //ns
-      //UInt32 sampler_index= set_index/32;
+      //printf("\nsampler set \n");   //ns
 
       //finding out invalid blocks
       for (UInt32 i = 0; i < m_associativity; i++)
       {
          if (!m_cache_block_info_array[i]->isValid())
          {
-            //printf("invalid block found \n");
+            //printf("invalid block found at index %d \n", i);
             // Mark our newly-inserted line as most-recently used
    
             if((m_cost[i]>cost_threshold) && (m_state[m_TI[i]]<state_max)) //state should be incremented
@@ -93,9 +93,15 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             //printf("new state of eip %d is %d \n",m_TI[i], m_state[m_TI[i]] );
    
             m_TI[i]=eip_truncated;
-            m_cost[i]=24;
+            m_cost[i]=0;
     
             moveToMRU(i);
+
+            //printf("\n cost is \n");
+            for (UInt32 i=0; i< m_associativity; i++)
+            {
+               //printf("%d ", m_cost[i]);
+            }
             return i;
          }
       }
@@ -108,7 +114,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          UInt32 index = 0;
          UInt8 max_bits = 0;
 
-         for (UInt32 i = 0; i < SRAM_ways; i++)
+         //for (UInt32 i = 0; i < SRAM_ways; i++)
+         for (UInt32 i = 0; i < m_associativity; i++)
          {
             if (m_lru_bits[i] > max_bits && isValidReplacement(i))
             {
@@ -149,16 +156,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             }
             else
             {
-               //printf("\n state of eip %d is not changed \n", m_TI[index]);
+               //printf("\n state of eip %d is %d and it is not changed \n", m_TI[index], m_state[m_TI[index]]);
             }
 
             //printf("new state of eip %d is %d \n",m_TI[index], m_state[m_TI[index]] );
 
             m_TI[index]=eip_truncated;
-            m_cost[index]=24;
+            m_cost[index]=0;
    
             moveToMRU(index);
             m_set_info->incrementAttempt(attempt);
+
+            //printf("\n cost is \n");
+            for (UInt32 i=0; i< m_associativity; i++)
+            {
+               //printf("%d ", m_cost[i]);
+            }
+            
             return index;
          }
       }   
@@ -166,7 +180,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    }
    else  //non-sampler set
    {
-      //printf("non-smplr set \n");   //ns
+      //printf("\nnon-smplr set \n");   //ns
       //finding invalid blocks
       //printf("state of eip %d is %d \n", eip_truncated, m_state[eip_truncated]); //ns
       if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
@@ -176,7 +190,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          {
             if (!m_cache_block_info_array[i]->isValid())
             {
-               //printf("invalid block found in sttam \n");   //ns 
+               //printf("invalid block found in sttam and its index is %d \n", i);   //ns 
                moveToMRU(i);
                return i;
             }
@@ -190,7 +204,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          {
             if (!m_cache_block_info_array[i]->isValid())
             { 
-               //printf("invalid block found in sram \n");   //ns
+               //printf("invalid block found in sram and its index is %d \n", i);   //ns
                moveToMRU(i);
                return i;
             }
@@ -202,8 +216,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       {
          if (!m_cache_block_info_array[i]->isValid())
          { 
-            //printf("invalid block found but not in proper partition \n");  //ns
-           moveToMRU(i);
+            //printf("invalid block found but not in proper partition and its index is %d \n", i);  //ns
+            moveToMRU(i);
             return i;
          }
       }
@@ -265,6 +279,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             // Mark our newly-inserted line as most-recently used
             moveToMRU(index);
             m_set_info->incrementAttempt(attempt);
+
+            //printf("index of victim is %d", index);
             return index;
          }
       }
@@ -279,26 +295,93 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 void
 CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
 {
+   //printf("\nupdateReplacementIndex called in l3. set index is %d and write flag is %d \n", set_index, write_flag);
    m_set_info->increment(m_lru_bits[accessed_index]);
    moveToMRU(accessed_index);
 
    if ((set_index % sampler_fraction)==0) //sampler sets
    {
+      //printf("\nsampler set (%d)\n", set_index);   //ns
       if(write_flag==1)
       {
-         m_cost[accessed_index]=m_cost[accessed_index]+24;  //cost modification
-      //   printf("new cost is %d \n \\\\\\\\ \n", m_cost[accessed_index]);   //ns
+         //printf("write hit!!\naccessed index is %d", accessed_index);
+
+         //printf("\nprevious cost is \n");
+         for (UInt32 i=0; i< m_associativity; i++)
+         {
+            //printf("%d ", m_cost[i]);
+         }
+         //printf("\n");
+
+         m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
+
+
+         //printf("new cost is \n");
+         for (UInt32 i=0; i< m_associativity; i++)
+         {
+            //printf("%d ", m_cost[i]);
+         }
+         //printf("\n");
       }
       else if(write_flag==0)
       {
-         m_cost[accessed_index]=m_cost[accessed_index]-1;
-      //   printf("new cost is %d \n \\\\\\\\ \n", m_cost[accessed_index]);   //n
+         //printf("read hit!!\naccessed index is %d", accessed_index);
+
+         //printf("\nprevious cost is \n");
+         for (UInt32 i=0; i< m_associativity; i++)
+         {
+            //printf("%d ", m_cost[i]);
+         }
+         //printf("\n");
+
+
+         m_cost[accessed_index]=m_cost[accessed_index]-Er;
+
+
+         //printf("new cost is \n");
+         for (UInt32 i=0; i< m_associativity; i++)
+         {
+            //printf("%d ", m_cost[i]);
+         }
+         //printf("\n");
       }
       else
          printf("error: value of write_flag is %d \n", write_flag);
    }
    
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+//created by arindam to pass writeback information to policy files (required in phc)
+void
+CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
+{
+   
+   if ((set_index % sampler_fraction)==0)    //sampler sets
+   {
+      //printf("\nsampler set, called from writeback, ");
+      //printf("accessed index is %d", accessed_index);
+   
+      //printf("\nprevious cost is \n");
+      for (UInt32 i=0; i< m_associativity; i++)
+      {
+         //printf("%d ", m_cost[i]);
+      }
+      //printf("\n");    
+      m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
+      //printf("new cost is \n");
+      for (UInt32 i=0; i< m_associativity; i++)
+      {
+         //printf("%d ", m_cost[i]);
+      }
+      //printf("\n");
+
+   
+   }
+   
+}
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 
 void
 CacheSetPHC::moveToMRU(UInt32 accessed_index)

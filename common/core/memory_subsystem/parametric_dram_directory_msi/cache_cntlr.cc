@@ -15,7 +15,8 @@
 IntPtr eip_global;
 IntPtr eip_global_2;
 static UInt64 g_NumberOfL3WritesDueToWriteBack; //nss
-static UInt64 g_NumberOfL3WritesFromDirectory; //nss
+//static UInt64 globalWritebacksToL3counter;   //this is a global counter. this counter will be reset when updateReplacementindex for phc in LLC is called 
+//static UInt64 g_NumberOfL3WritesFromDirectory; //nss
 
 /* Accounts for blocks inserted into LLC from DRAM */
 static UInt64 g_NumberOfL3Inserts;
@@ -1911,10 +1912,15 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
    ////////////////////L3 writeback latency taken care off here [ARINDAM]/////////////////////////////////////////////////////////
    UInt32 blockIndex;   //sn copied from anushree
    
+
+   m_master->m_cache->accessSingleLine2(address);   // created by arindam, to pass writeback information to policy
+   
    if(m_mem_component==5)  //sn: copied from Anushree, added to increment time taken for llc write
    {
       g_NumberOfL3WritesDueToWriteBack++; //nss
+
       blockIndex = m_master->m_cache->getBlockIndex(address);
+
       if ((blockIndex < WAYS_TO_SRAM ))  //SRAM Blocks
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);  
       else 
@@ -1928,18 +1934,21 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
    if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) 
    {
       MYLOG("writing to evict buffer %lx", address);
-assert(offset==0);
-assert(data_length==getCacheBlockSize());
+      assert(offset==0);
+      assert(data_length==getCacheBlockSize());
       if (data_buf)
          memcpy(m_master->m_evicting_buf + offset, data_buf, data_length);
-   } else {
+   } 
+   else 
+   {
       __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
          address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime(thread_num), false);
       LOG_ASSERT_ERROR(cache_block_info, "writethrough expected a hit at next-level cache but got miss");
       LOG_ASSERT_ERROR(cache_block_info->getCState() == CacheState::MODIFIED, "Got writeback for non-MODIFIED line");
    }
 
-   if (m_cache_writethrough) {
+   if (m_cache_writethrough) 
+   {
       acquireStackLock(true);
       m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length, thread_num);
       releaseStackLock(true);
