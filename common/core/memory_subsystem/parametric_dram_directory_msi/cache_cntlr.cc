@@ -792,6 +792,7 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
 
 void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* master)
 {
+    #if 0
     UInt32 blockIndex = master->m_cache->getBlockIndex(address);
 
     //if index is 0,1,2,3,4 it is SRAM block, else STTRAM block
@@ -802,6 +803,7 @@ void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* m
                                             ShmemPerfModel::_USER_THREAD);
     }
     else if (blockIndex > (WAYS_TO_SRAM - 1))
+    #endif
     {
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
