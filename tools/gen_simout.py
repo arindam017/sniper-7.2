@@ -48,30 +48,6 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     i / (c or 1)
     for i, c in zip(results['performance_model.instruction_count'], results['performance_model.cycle_count_fixed'])
   ]
-
-  if 'L3.timeSTTRAM' in results:
-    timeSTTRAM = results['L3.timeSTTRAM'][0]
-
-  results['timeSTTRAM'] = [results['L3.timeSTTRAM'][c]
-    for c in range(ncores)
-  ]
-
-  time1 = time0
-  time1 += timeSTTRAM
-
-  results['performance_model.elapsed_time_fixed_sttram'] = [
-    time1
-    for c in range(ncores)
-  ]
-  results['performance_model.cycle_count_fixed_sttram'] = [
-    results['performance_model.elapsed_time_fixed_sttram'][c] * results['fs_to_cycles_cores'][c]
-    for c in range(ncores)
-  ]
-  results['performance_model.ipc_sttram'] = [
-    i / (c or 1)
-    for i, c in zip(results['performance_model.instruction_count'], results['performance_model.cycle_count_fixed_sttram'])
-  ]
-
   results['performance_model.nonidle_elapsed_time'] = [
     results['performance_model.elapsed_time'][c] - results['performance_model.idle_elapsed_time'][c]
     for c in range(ncores)
@@ -84,15 +60,11 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     results['performance_model.idle_elapsed_time'][c] / float(time0)
     for c in range(ncores)
   ]
-
+  
   template = [
-    ('  Global Time',  'performance_model.elapsed_time_fixed', str),
-    ('  Time STTRAM',  'timeSTTRAM', str),
     ('  Instructions', 'performance_model.instruction_count', str),
     ('  Cycles',       'performance_model.cycle_count_fixed', format_int),
     ('  IPC',          'performance_model.ipc', format_float(3)),
-    ('  Cycles_STTRAM','performance_model.cycle_count_fixed_sttram', format_int),
-    ('  IPC_STTRAM',   'performance_model.ipc_sttram', format_float(3)),
     ('  Time (ns)',    'performance_model.elapsed_time_fixed', format_ns(0)),
     ('  Idle time (ns)', 'performance_model.idle_elapsed_time', format_ns(0)),
     ('  Idle time (%)',  'performance_model.idle_elapsed_percent', format_pct),
@@ -134,103 +106,31 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   existcaches = [ c for c in allcaches if '%s.loads'%c in results ]
   for c in existcaches:
     results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
-    results['%s.stores'%c] = results['%s.stores'%c]
-    results['%s.loads'%c] = results['%s.loads'%c]
     results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))
-    results['%s.load-misses'%c] = results['%s.load-misses'%c]
-    results['%s.store-misses'%c] = map(sum, zip(results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))
     results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
     results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([
       ('  Cache %s'%c, '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
-      ('    num cache loads', '%s.loads'%c, str),
-      ('    num cache stores', '%s.stores'%c, str),
       ('    num cache misses', '%s.misses'%c, str),
-      ('    num load  misses', '%s.load-misses'%c, str),
-      ('    num store misses', '%s.store-misses'%c, str),
       ('    miss rate', '%s.missrate'%c, lambda v: '%.2f%%' % v),
       ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
     ])
 
-  results['L3.LLCStore'] = [results['L3.LLCStore'][c]
+
+  results['L3.NumberOfL3WriteFromDirectory'] = [results['L3.NumberOfL3WriteFromDirectory'][c]	//sn anushree
     for c in range(ncores)
   ]
 
-  results['L3.access.loads'] = [results['L3.loads'][c]
+  results['L3.NumberOfL3WriteFromL2'] = [results['L3.NumberOfL3WriteFromL2'][c]	//sn anushree
     for c in range(ncores)
-  ]
-
-  results['L3.access.stores'] = [results['L3.stores'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.access.loadsMiss'] = [results['L3.load-misses'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.access.storeMisses-I'] = [results['L3.store-misses-I'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.access.storeMisses-E'] = [results['L3.store-misses-E'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.access.storeMisses'] = [results['L3.store-misses'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.NumberOfL3Inserts'] = [results['L3.NumberOfL3Inserts'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.NumberOfL3Stores'] = [results['L3.NumberOfL3Stores'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.LLCLoads'] = [results['L3.LLCLoads'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.NumberOfL3LoadHits'] = [results['L3.NumberOfL3LoadHits'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.NumberOfL3StoreHits'] = [results['L3.NumberOfL3StoreHits'][c]
-    for c in range(ncores)
-  ]
-
-  results['L3.NumberOfL3StoreMiss'] = [results['L3.NumberOfL3StoreMiss'][c]
-    for c in range(ncores)
-  ]
-
-  results['L2.NumberL2WritebacksToL3'] = [results['L2.NumberL2WritebacksToL3'][c]
-    for c in range(ncores)
-  ]
-
-  template += [
-    ('  LLC Stats', '', '',),
   ]
 
   template.extend([
-  ('  LLC Stats Sniper', '', '',),
-  ('    Loads', 'L3.access.loads', str),
-  ('    LoadMisses', 'L3.access.loadsMiss', str),
-  ('    Stores', 'L3.access.stores', str),
-  ('    StoreMisses-I', 'L3.access.storeMisses-I', str),
-  ('    StoreMisses-E', 'L3.access.storeMisses-E', str),
-  ('    StoreMisses', 'L3.access.storeMisses', str),
-  ('  LLC Stats Manual', '', '',),
-  ('    Loads', 'L3.LLCLoads', str),
-  ('    LoadHits', 'L3.NumberOfL3LoadHits', str),
-  ('    Stores', 'L3.NumberOfL3Stores', str),
-  ('    StoreHits', 'L3.NumberOfL3StoreHits', str),
-  ('    StoreMiss', 'L3.NumberOfL3StoreMiss', str),
-  ('    Writebacks: L2->>L3', 'L2.NumberL2WritebacksToL3', str),
-  ('    Insert: DRAM to LLC', 'L3.NumberOfL3Inserts', str),
-  ('    Store (UpdateCounter)', 'L3.LLCStore', str),
+  ('  L3NumberOfL3WritesFromL2', 'L3.NumberOfL3WriteFromL2', str),
+  ('  L3NumberOfL3WritesFromDirectory', 'L3.NumberOfL3WriteFromDirectory', str),
   ])
+
 
   allcaches = [ 'nuca-cache', 'dram-cache' ]
   existcaches = [ c for c in allcaches if '%s.reads'%c in results ]
@@ -248,7 +148,7 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
       ('    miss rate', '%s.missrate'%c, lambda v: '%.2f%%' % v),
       ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
     ])
-
+    
   results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
   results['dram.avglatency'] = map(lambda (a,b): a/b if b else float('inf'), zip(results['dram.total-access-latency'], results['dram.accesses']))
   template += [
@@ -333,3 +233,4 @@ if __name__ == '__main__':
     sys.exit(-1)
 
   generate_simout(jobid = jobid, resultsdir = resultsdir, partial = partial)
+
