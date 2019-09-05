@@ -371,7 +371,9 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
                curr_addr_aligned, curr_offset,
                data_buf ? curr_data_buffer_head : NULL, curr_size,
                modeled,
-               eip); //sn last argument added by arindam. it is the PC 
+               eip); //sn last argument added by arindam. eip is the program counter of the instruction
+                     //Somewhere (in some file) it should be described why PC is required. I assume that
+                     //PC is required for implementation of PC-tagged marking of cache blocks (similar to SBDP)
 
       if (hit_where != (HitWhere::where_t)mem_component)
       {

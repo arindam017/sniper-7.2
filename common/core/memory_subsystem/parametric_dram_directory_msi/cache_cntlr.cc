@@ -12,8 +12,10 @@
 
 #include <cstring>
 
+//Why two eip variables are required
 IntPtr eip_global;
 IntPtr eip_global_2;
+
 static UInt64 g_NumberOfL3WritesDueToWriteBack; //nss
 static UInt64 g_NumberOfL3WritesFromDirectory; //nss
 
@@ -1539,7 +1541,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
        blockIndex = m_master->m_cache->getBlockIndex(address);
        //printf("Index:%s\n", itostr(blockIndex).c_str());
 
-       //if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block 
+       //if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block
        if (blockIndex <= (WAYS_TO_SRAM - 1))
        {
            getMemoryManager()->incrElapsedTime(m_mem_component,
@@ -1555,7 +1557,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
        }
        */
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-   
+
        accountForWriteLatencyOfLLC(address, m_master);
    }
 
@@ -1656,7 +1658,7 @@ MYLOG("evicting @%lx", evict_address);
                    /* To count number of writebacks from L2 cache to L3/LLC in a
                     * writeback cache */
                    g_NumberL2WritebacksToL3++;
-                   
+
                    /* Address is the address of the block which was newly inserted in L2
                     * and resulted in eviction of dirty block with address evict_address
                     * from L2 and subsequent writeback in L3. Since, evict_address will
@@ -1665,7 +1667,7 @@ MYLOG("evicting @%lx", evict_address);
                }
             }
          }
-         
+
          m_next_cache_cntlr->notifyPrevLevelEvict(m_core_id_master, m_mem_component, evict_address);
       }
       else if (m_master->m_dram_cntlr)
@@ -1910,22 +1912,22 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
 
    ////////////////////L3 writeback latency taken care off here [ARINDAM]/////////////////////////////////////////////////////////
    UInt32 blockIndex;   //sn copied from anushree
-   
+
    if(m_mem_component==5)  //sn: copied from Anushree, added to increment time taken for llc write
    {
       g_NumberOfL3WritesDueToWriteBack++; //nss
       blockIndex = m_master->m_cache->getBlockIndex(address);
       if ((blockIndex < WAYS_TO_SRAM ))  //SRAM Blocks
-         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);  
-      else 
-         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);   
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+      else
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
    }
-   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////   
+   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-   //printf("writeCacheBlock called by %d \n", m_mem_component); //nss   
+   //printf("writeCacheBlock called by %d \n", m_mem_component); //nss
    // TODO: should we update access counter?
 
-   if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) 
+   if (m_master->m_evicting_buf && (address == m_master->m_evicting_address))
    {
       MYLOG("writing to evict buffer %lx", address);
 assert(offset==0);
