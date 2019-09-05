@@ -13,6 +13,8 @@ class CacheSetRoundRobin : public CacheSet
       UInt32 getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index);
       void updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index);
 
+      void updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index);   //created by arindam to pass writeback information to policy files (required in phc)
+
    private:
       UInt32 m_replacement_index;
 };

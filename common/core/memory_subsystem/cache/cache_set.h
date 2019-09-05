@@ -47,6 +47,9 @@ class CacheSet
 
       void read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes, bool update_replacement, UInt32 set_index);
       void write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes, bool update_replacement, UInt32 set_index);
+
+      void write_line2(UInt32 line_index, UInt32 set_index);   //created by arindam to pass writeback information to policy files (required in phc)
+
       CacheBlockInfo* find(IntPtr tag, UInt32* line_index = NULL);
       bool invalidate(IntPtr& tag);
       void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr = NULL);
@@ -60,6 +63,9 @@ class CacheSet
 
       virtual UInt32 getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index) = 0;
       virtual void updateReplacementIndex(UInt32, UInt8, UInt32) = 0;
+
+      virtual void updateReplacementIndex2(UInt32, UInt32) = 0;
+
 
       bool isValidReplacement(UInt32 index);
 

@@ -83,6 +83,16 @@ CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 byt
    }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////
+//created by arindam to pass writeback information to policy files (required in phc)
+void
+CacheSet::write_line2(UInt32 line_index, UInt32 set_index)
+{
+   updateReplacementIndex2(line_index, set_index);
+
+}
+///////////////////////////////////////////////////////////////////////////////////////////
+
 CacheBlockInfo*
 CacheSet::find(IntPtr tag, UInt32* line_index)
 {

@@ -85,6 +85,15 @@ CacheSetLRU::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
    moveToMRU(accessed_index);
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////
+//created by arindam to pass writeback information to policy files (required in phc)
+void
+CacheSetLRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
+{
+
+}
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 void
 CacheSetLRU::moveToMRU(UInt32 accessed_index)
 {

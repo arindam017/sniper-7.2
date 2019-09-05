@@ -55,6 +55,9 @@ class Cache : public CacheBase
       bool invalidateSingleLine(IntPtr addr);
       CacheBlockInfo* accessSingleLine(IntPtr addr,
             access_t access_type, Byte* buff, UInt32 bytes, SubsecondTime now, bool update_replacement);
+
+      void accessSingleLine2(IntPtr addr);      //created by arindam to pass writeback information to policy files (required in phc)
+
       void insertSingleLine(IntPtr addr, Byte* fill_buff,
             bool* eviction, IntPtr* evict_addr,
             CacheBlockInfo* evict_block_info, Byte* evict_buff, SubsecondTime now, CacheCntlr *cntlr = NULL, int mcomponent=0, IntPtr eip=0);
@@ -69,6 +72,7 @@ class Cache : public CacheBase
       /* Calls the cache_set to get index of the block specified
        * by the addr */
       UInt32 getBlockIndex(IntPtr addr);
+      UInt32 getSetIndex(IntPtr addr);
 
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
