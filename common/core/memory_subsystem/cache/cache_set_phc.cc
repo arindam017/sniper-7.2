@@ -5,6 +5,30 @@
 // Implements PHC paper IEEE TC 2016
 // Prediction Hybrid Cache: An Energy-Efficient STT-RAM Cache Architecture
 
+/* Steps to be followed to implement PHC
+ * 1. Every block in the set will store information about PC which inserted
+      the block in the cache. This will be done using getReplacementIndex()
+ * 2. Every block will also store a cost variable to maintain the cost (write/read)
+      of the block.
+      Cost will be updated on every read and write operation.
+        updateReplacementIndex() function can be do this.
+ * 3. On eviction of a cache block, we need to see its cost. If the blocks cost
+      is more than a threshold, then the PC which brought the block to cache is
+      marked as Hot Triggering Instruction (HTI). TI here is basically PC. The
+      status of all the sampled TI blocks is stored in a prediction_table.
+ * 4. On insertion of a new cache block, it is checked that if the cache block
+      has been brought by a HTI. If so, the block is assumed to be write-intesive
+      and should be inserted to the SRAM part of the hybrid cache. Else the block
+      should be inserted to the STTRAM part. If all the SRAM/STTRAM ways are full
+      a block is evicted from the corresponding part using LRU policy.
+
+      TODO: Which blocks should participate in determining the LRU stack is not
+      clearyly mentioned in PHC paper. Are there two LRU stacks one each for SRAM
+      and STTRAM ways?
+ * 5. Actions need to be performed on Insertion (write placement), Eviction (Checking
+      if the TI is HTI), and Updation (block's cost) of the cache block.
+ */
+
 UInt8 Ew=24; /* write cost */
 UInt8 Er=-1; /* read cost */
 UInt16 predictor_table_length=256;
