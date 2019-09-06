@@ -29,6 +29,21 @@
       if the TI is HTI), and Updation (block's cost) of the cache block.
  */
 
+/* Steps to implement dynamic HPC
+ * Aim: To dynamically adjust the threshold as per the phase of the application
+ * 1. Hardware: 6 16 bit counters, one each for measureing M_0, M_RLU, M_+, M_-
+ *    partial-tag-array, predictor table, one each for M_+, M_-
+ *    6 8-bit counters to measure cost of evicted block from partial-tag-arrays
+ *    with cost threshold k_0, k_+, k_-. Both least and max cost has to be measured
+ *    for each k_n
+ * 2. M_0: number of misses with hybrid cache using threshold k_0
+ *    M_LRU: # of misses in the sampler
+ *    M_+: # of misses in the partial-tag-arrary with threshold k_+
+ *    M_-: # of misses in the partial-tag-arrary with threshold k_-
+ * 3. For start k_+ = k_0 + 1 and k_- = k_0 - 1
+ * TODO: Need to discuss. In my understanding k_- = c_-(k_n) = max of C_- for all k_n
+ */
+
 UInt8 Ew=24; /* write cost */
 UInt8 Er=-1; /* read cost */
 UInt16 predictor_table_length=256;
