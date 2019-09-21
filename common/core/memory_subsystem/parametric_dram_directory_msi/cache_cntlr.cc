@@ -19,6 +19,11 @@ static UInt64 g_NumberOfL3Misses;
 static UInt64 gLLCStore2;
 static UInt64 gLLCStore1;
 
+#define OFFSET_ARRAY_SIZE 9
+
+static UInt64 g_numWritesAtOffset[OFFSET_ARRAY_SIZE]; /* For offset 8,16,24,...,64 */
+static UInt64 g_numReadsAtOffset[OFFSET_ARRAY_SIZE];
+
 UInt8  g_cache_write;
 UInt32 g_offset;
 
@@ -230,6 +235,15 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "NumberOfL3Read",   &g_NumberOfL3Read);
    registerStatsMetric(name, core_id, "NumberOfL3Access", &g_NumberOfL3Access);
    registerStatsMetric(name, core_id, "NumberOfL3Misses", &g_NumberOfL3Misses);
+
+   for(UInt32 i = 0; i < OFFSET_ARRAY_SIZE; ++i)
+   {
+      g_numWritesAtOffset[i] = 0;
+      g_numReadsAtOffset[i] = 0;
+
+      registerStatsMetric(name, core_id, String("numberOfL3WriteAtOffset-")+itostr(i), &g_numWritesAtOffset[i]);
+      registerStatsMetric(name, core_id, String("numberOfL3ReadAtOffset-")+itostr(i), &g_numReadsAtOffset[i]);
+   }
 
    registerStatsMetric(name, core_id, "LLCStore1", &gLLCStore1);
    registerStatsMetric(name, core_id, "LLCStore2", &gLLCStore2);
@@ -1352,6 +1366,13 @@ CacheCntlr::accessCache(
    {
       case Core::READ:
       case Core::READ_EX:
+
+         if (m_mem_component == MemComponent::L3_CACHE)
+         {
+            UInt32 index = g_offset / 8;
+            g_numReadsAtOffset[index]++;
+         }
+
          m_master->m_cache->accessSingleLine(ca_address + offset, Cache::LOAD, data_buf, data_length,
                                              getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), update_replacement);
          break;
@@ -1360,6 +1381,8 @@ CacheCntlr::accessCache(
          if (m_mem_component == MemComponent::L3_CACHE)
          {
             g_cache_write = 1;
+            UInt32 index = g_offset / 8;
+            g_numWritesAtOffset[index]++;
          }
          
          m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length,
@@ -1432,6 +1455,12 @@ CacheCntlr::invalidateCacheBlock(IntPtr address)
 void
 CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::Thread_t thread_num, bool update_replacement)
 {
+   if (m_mem_component == MemComponent::L3_CACHE)
+   {
+      UInt32 index = g_offset / 8;
+      g_numReadsAtOffset[index]++;
+   }
+
    __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
       address, Cache::LOAD, data_buf, getCacheBlockSize(), getShmemPerfModel()->getElapsedTime(thread_num), update_replacement);
    LOG_ASSERT_ERROR(cache_block_info != NULL, "Expected block to be there but it wasn't");
@@ -1459,6 +1488,9 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
                                             ShmemPerfModel::_USER_THREAD);
+
+        UInt32 index = g_offset / 8;
+        g_numWritesAtOffset[index]++;
    }
 
    m_master->m_cache->insertSingleLine(address, data_buf,
@@ -1802,7 +1834,8 @@ assert(data_length==getCacheBlockSize());
       if (m_mem_component == MemComponent::L3_CACHE)
       {
          g_cache_write = 1;
-         printf("writeCacheBlock: offset:%u length:%u address:%lx\n", offset, data_length, address);
+         UInt32 index = g_offset / 8;
+         g_numWritesAtOffset[index]++;
       }
 
       __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
