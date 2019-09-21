@@ -2,6 +2,9 @@
 #include "cache.h"
 #include "log.h"
 
+extern UInt8  g_cache_write;
+extern UInt32 g_offset;
+
 // Cache class
 // constructors/destructors
 Cache::Cache(
@@ -92,6 +95,8 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
    UInt32 block_offset;
 
    splitAddress(addr, tag, set_index, block_offset);
+   if (g_cache_write)
+   printf("accessSingleLine line addr:%lx blockOffset:%u length:%u offset:%u\n", addr, block_offset, bytes, g_offset);
 
    CacheSet* set = m_sets[set_index];
    CacheBlockInfo* cache_block_info = set->find(tag, &line_index);

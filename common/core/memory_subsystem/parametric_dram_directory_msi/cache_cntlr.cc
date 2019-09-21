@@ -19,6 +19,9 @@ static UInt64 g_NumberOfL3Misses;
 static UInt64 gLLCStore2;
 static UInt64 gLLCStore1;
 
+UInt8  g_cache_write;
+UInt32 g_offset;
+
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
 //#define PRIVATE_L2_OPTIMIZATION
@@ -347,7 +350,9 @@ CacheCntlr::processMemOpFromCore(
       bool count)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
-
+   
+   g_offset = offset;
+  
    // Protect against concurrent access from sibling SMT threads
    ScopedLock sl_smt(m_master->m_smt_lock);
 
@@ -1338,7 +1343,6 @@ CacheCntlr::operationPermissibleinCache(
    return cache_hit;
 }
 
-
 void
 CacheCntlr::accessCache(
       Core::mem_op_t mem_op_type, IntPtr ca_address, UInt32 offset,
@@ -1353,8 +1357,14 @@ CacheCntlr::accessCache(
          break;
 
       case Core::WRITE:
+         if (m_mem_component == MemComponent::L3_CACHE)
+         {
+            g_cache_write = 1;
+         }
+         
          m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length,
                                              getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), update_replacement);
+         g_cache_write = 0;
          // Write-through cache - Write the next level cache also
          if (m_cache_writethrough) {
             LOG_ASSERT_ERROR(m_next_cache_cntlr, "Writethrough enabled on last-level cache !?");
@@ -1789,8 +1799,16 @@ assert(data_length==getCacheBlockSize());
       if (data_buf)
          memcpy(m_master->m_evicting_buf + offset, data_buf, data_length);
    } else {
+      if (m_mem_component == MemComponent::L3_CACHE)
+      {
+         g_cache_write = 1;
+         printf("writeCacheBlock: offset:%u length:%u address:%lx\n", offset, data_length, address);
+      }
+
       __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
          address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime(thread_num), false);
+      g_cache_write = 0;
+      
       LOG_ASSERT_ERROR(cache_block_info, "writethrough expected a hit at next-level cache but got miss");
       LOG_ASSERT_ERROR(cache_block_info->getCState() == CacheState::MODIFIED, "Got writeback for non-MODIFIED line");
    }

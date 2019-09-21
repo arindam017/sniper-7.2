@@ -7,11 +7,15 @@
 #include "cache_set_random.h"
 #include "cache_set_round_robin.h"
 #include "cache_set_srrip.h"
+#include "cache_set_hybridIntraCacheline.h"
 #include "cache_base.h"
 #include "log.h"
 #include "simulator.h"
 #include "config.h"
 #include "config.hpp"
+
+UInt8 g_accessIsWrite;
+UInt8 g_accessIsRead;
 
 CacheSet::CacheSet(CacheBase::cache_t cache_type,
       UInt32 associativity, UInt32 blocksize):
@@ -50,7 +54,11 @@ CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 byt
       memcpy((void*) out_buff, &m_blocks[line_index * m_blocksize + offset], bytes);
 
    if (update_replacement)
+   {
+      g_accessIsRead = 1;
       updateReplacementIndex(line_index);
+      g_accessIsRead = 0;
+   }
 }
 
 void
@@ -63,7 +71,11 @@ CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 byt
       memcpy(&m_blocks[line_index * m_blocksize + offset], (void*) in_buff, bytes);
 
    if (update_replacement)
+   {
+      g_accessIsWrite = 1;
       updateReplacementIndex(line_index);
+      g_accessIsWrite = 0;
+   }
 }
 
 CacheBlockInfo*
@@ -166,6 +178,9 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
       case CacheBase::RANDOM:
          return new CacheSetRandom(cache_type, associativity, blocksize);
 
+      case CacheBase::HYBRID_INTRA_CACHELINE:
+         return new CacheSetHybridIntraCacheLine(cache_type, associativity, blocksize);
+
       default:
          LOG_PRINT_ERROR("Unrecognized Cache Replacement Policy: %i",
                policy);
@@ -227,6 +242,8 @@ CacheSet::parsePolicyType(String policy)
       return CacheBase::SRRIP_QBS;
    if (policy == "random")
       return CacheBase::RANDOM;
+   if (policy == "hybrid_intra_cacheLine")
+      return CacheBase::HYBRID_INTRA_CACHELINE;
 
    LOG_PRINT_ERROR("Unknown replacement policy %s", policy.c_str());
 }
