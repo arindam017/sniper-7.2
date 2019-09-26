@@ -96,26 +96,26 @@ CacheSetPHC::CacheSetPHC(
       m_cost[i] = 128;  //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
    }
 
-   ////////for checing migration severity////////////////////
-   write_array = new UInt16[m_associativity];
+   ////////for checking migration severity////////////////////
+   write_array = new UInt16[m_associativity];      //write array counts the number of writes to a block
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       write_array[i] = 0;
    }
 
-   read_array = new UInt16[m_associativity];
+   read_array = new UInt16[m_associativity];       //read array counts the number of reads to a block
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       read_array[i] = 0;
    }
 
-   prev_write_array = new UInt16[m_associativity];
+   prev_write_array = new UInt16[m_associativity]; //required to check transition
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       prev_write_array[i] = 0;
    }
 
-   prev_read_array = new UInt16[m_associativity];
+   prev_read_array = new UInt16[m_associativity];  //required to check transition
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       prev_read_array[i] = 0;
@@ -360,7 +360,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks. At eviction we do the counting
                total_write_intense_blocks++;
             else
                total_non_write_intense_blocks++;
