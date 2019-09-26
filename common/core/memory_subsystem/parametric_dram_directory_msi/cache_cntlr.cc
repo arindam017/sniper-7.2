@@ -20,12 +20,16 @@ static UInt64 gLLCStore2;
 static UInt64 gLLCStore1;
 
 #define OFFSET_ARRAY_SIZE 9
+#define WRITE_LENGTHS 18
 
 static UInt64 g_numWritesAtOffset[OFFSET_ARRAY_SIZE]; /* For offset 8,16,24,...,64 */
 static UInt64 g_numReadsAtOffset[OFFSET_ARRAY_SIZE];
+static UInt64 g_numWriteLengths[WRITE_LENGTHS];
+static UInt64 g_numWriteLengthsSmall[OFFSET_ARRAY_SIZE];
 
 UInt8  g_cache_write;
 UInt32 g_offset;
+UInt32 g_dataLength;
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -236,13 +240,24 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "NumberOfL3Access", &g_NumberOfL3Access);
    registerStatsMetric(name, core_id, "NumberOfL3Misses", &g_NumberOfL3Misses);
 
-   for(UInt32 i = 0; i < OFFSET_ARRAY_SIZE; ++i)
+   if (m_mem_component == MemComponent::L3_CACHE)
    {
-      g_numWritesAtOffset[i] = 0;
-      g_numReadsAtOffset[i] = 0;
+       for(UInt32 i = 0; i < OFFSET_ARRAY_SIZE; ++i)
+       {
+          g_numWritesAtOffset[i]    = 0;
+          g_numReadsAtOffset[i]     = 0;
+          g_numWriteLengthsSmall[i] = 0;
 
-      registerStatsMetric(name, core_id, String("numberOfL3WriteAtOffset-")+itostr(i), &g_numWritesAtOffset[i]);
-      registerStatsMetric(name, core_id, String("numberOfL3ReadAtOffset-")+itostr(i), &g_numReadsAtOffset[i]);
+          registerStatsMetric(name, core_id, String("numberOfL3WriteAtOffset-")+itostr(i), &g_numWritesAtOffset[i]);
+          registerStatsMetric(name, core_id, String("numberOfL3ReadAtOffset-")+itostr(i), &g_numReadsAtOffset[i]);
+          registerStatsMetric(name, core_id, String("lengthOfL3WritesSmall-")+itostr(i), &g_numWriteLengthsSmall[i]);
+       }
+
+       for(UInt32 i = 0; i < WRITE_LENGTHS; ++i)
+       {
+          g_numWriteLengths[i]   = 0;
+          registerStatsMetric(name, core_id, String("lengthOfL3Writes-")+itostr(i), &g_numWriteLengths[i]);
+       }
    }
 
    registerStatsMetric(name, core_id, "LLCStore1", &gLLCStore1);
@@ -364,9 +379,37 @@ CacheCntlr::processMemOpFromCore(
       bool count)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
-   
-   g_offset = offset;
-  
+
+   g_offset     = offset;
+   g_dataLength = data_length;
+
+   if (mem_op_type == Core::WRITE)
+   {
+      /* Index 0 is for write length 0, Index 1 is for write length 1
+       * Index 2 is for write length 2 - 3, Index 3 is for write length 4 - 7
+       * Index 4 is for write length 8 - 11 and so on */
+      if (g_dataLength <= 8)
+      {
+          g_numWriteLengthsSmall[g_dataLength]++;
+      }
+
+      if (g_dataLength == 0)
+      {
+          g_numWriteLengths[0]++;
+          g_numWriteLengthsSmall[0]++;
+      }
+      else if (g_dataLength == 1)
+      {
+          g_numWriteLengths[1]++;
+      }
+      else if (g_dataLength <= 64)
+      {
+          g_numWriteLengths[(g_dataLength / 4) + 2]++;
+      }
+   }
+
+   //printf("CacheCntlr: Offset:%u DataLen:%u\n", offset, data_length);
+
    // Protect against concurrent access from sibling SMT threads
    ScopedLock sl_smt(m_master->m_smt_lock);
 
@@ -432,7 +475,7 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
    if (cache_hit)
    {
 MYLOG("L1 hit");
-      /* For L1 cache. So, will remain same even for Hybrid Cache */  
+      /* For L1 cache. So, will remain same even for Hybrid Cache */
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
 
@@ -844,7 +887,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if (isPrefetch == Prefetch::NONE)
          getCache()->updateCounters(cache_hit);
       updateCounters(mem_op_type, address, cache_hit, getCacheState(address), isPrefetch);
-    
+
       /* Accounting for store */
       if ((mem_op_type == Core::WRITE)
       &&  (m_mem_component == MemComponent::L3_CACHE))
@@ -1382,9 +1425,13 @@ CacheCntlr::accessCache(
          {
             g_cache_write = 1;
             UInt32 index = g_offset / 8;
-            g_numWritesAtOffset[index]++;
+
+            if (g_dataLength <= 8)
+            {
+               g_numWritesAtOffset[index]++;
+            }
          }
-         
+
          m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length,
                                              getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), update_replacement);
          g_cache_write = 0;
@@ -1488,9 +1535,6 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
                                             ShmemPerfModel::_USER_THREAD);
-
-        UInt32 index = g_offset / 8;
-        g_numWritesAtOffset[index]++;
    }
 
    m_master->m_cache->insertSingleLine(address, data_buf,
@@ -1835,13 +1879,17 @@ assert(data_length==getCacheBlockSize());
       {
          g_cache_write = 1;
          UInt32 index = g_offset / 8;
-         g_numWritesAtOffset[index]++;
+
+         if (g_dataLength <= 8)
+         {
+            g_numWritesAtOffset[index]++;
+         }
       }
 
       __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
          address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime(thread_num), false);
       g_cache_write = 0;
-      
+
       LOG_ASSERT_ERROR(cache_block_info, "writethrough expected a hit at next-level cache but got miss");
       LOG_ASSERT_ERROR(cache_block_info->getCState() == CacheState::MODIFIED, "Got writeback for non-MODIFIED line");
    }
