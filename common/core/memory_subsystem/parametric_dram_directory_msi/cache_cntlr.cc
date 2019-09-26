@@ -12,12 +12,10 @@
 
 #include <cstring>
 
-//Why two eip variables are required
 IntPtr eip_global;
 IntPtr eip_global_2;
-
 static UInt64 g_NumberOfL3WritesDueToWriteBack; //nss
-//static UInt64 globalWritebacksToL3counter;   //this is a global counter. this counter will be reset when updateReplacementindex for phc in LLC is called
+//static UInt64 globalWritebacksToL3counter;   //this is a global counter. this counter will be reset when updateReplacementindex for phc in LLC is called 
 //static UInt64 g_NumberOfL3WritesFromDirectory; //nss
 
 /* Accounts for blocks inserted into LLC from DRAM */
@@ -38,6 +36,7 @@ static UInt64 g_NumberL2WritebacksToL3;
 /* If the flag is true, it indicates that a block from LLC is getting evicted.
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
  */
+//#define WAYS_TO_SRAM    4
 #define WAYS_TO_SRAM    4
 
 // Define to allow private L2 caches not to take the stack lock.
@@ -442,7 +441,7 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
    if (cache_hit)
    {
       MYLOG("L1 hit");
-
+      
       /* For L1 cache. So, will remain same even for Hybrid Cache */
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
@@ -1435,7 +1434,7 @@ CacheCntlr::accessCache(
          m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length,
                                              getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), update_replacement);
          // Write-through cache - Write the next level cache also
-         if (m_cache_writethrough)
+         if (m_cache_writethrough) 
          {
             LOG_ASSERT_ERROR(m_next_cache_cntlr, "Writethrough enabled on last-level cache !?");
             MYLOG("writethrough start");
@@ -1545,7 +1544,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
        blockIndex = m_master->m_cache->getBlockIndex(address);
        //printf("Index:%s\n", itostr(blockIndex).c_str());
 
-       //if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block
+       //if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block 
        if (blockIndex <= (WAYS_TO_SRAM - 1))
        {
            getMemoryManager()->incrElapsedTime(m_mem_component,
@@ -1561,7 +1560,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
        }
        */
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
+   
        accountForWriteLatencyOfLLC(address, m_master);
    }
 
@@ -1663,7 +1662,6 @@ MYLOG("evicting @%lx", evict_address);
                    /* To count number of writebacks from L2 cache to L3/LLC in a
                     * writeback cache */
                    g_NumberL2WritebacksToL3++;
-
                    /* Address is the address of the block which was newly inserted in L2
                     * and resulted in eviction of dirty block with address evict_address
                     * from L2 and subsequent writeback in L3. Since, evict_address will
@@ -1672,7 +1670,7 @@ MYLOG("evicting @%lx", evict_address);
                }
             }
          }
-
+         
          m_next_cache_cntlr->notifyPrevLevelEvict(m_core_id_master, m_mem_component, evict_address);
       }
       else if (m_master->m_dram_cntlr)
@@ -1821,16 +1819,16 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
          }
       }
 
-      if (cache_block_info->getCState() == CacheState::MODIFIED)
+      if (cache_block_info->getCState() == CacheState::MODIFIED) 
       {
          /* data is modified, write it back */
 
-         if (m_cache_writethrough)
+         if (m_cache_writethrough) 
          {
             /* next level already has the data */
 
-         }
-         else if (m_next_cache_cntlr)
+         } 
+         else if (m_next_cache_cntlr) 
          {
             /* write straight into the next level cache */
             Byte data_buf[getCacheBlockSize()];
@@ -1839,8 +1837,8 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
             is_writeback = true;
             sibling_hit = true;
 
-         }
-         else if (out_buf)
+         } 
+         else if (out_buf) 
          {
             /* someone (presumably the directory interfacing code) is waiting to consume the data */
             retrieveCacheBlock(address, out_buf, thread_num, false);
@@ -1848,8 +1846,8 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
             is_writeback = true;
             sibling_hit = true;
 
-         }
-         else
+         } 
+         else 
          {
             /* no-one will take my data !? */
             LOG_ASSERT_ERROR( cache_block_info->getCState() != CacheState::MODIFIED, "MODIFIED data is about to get lost!");
@@ -1923,8 +1921,9 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
 {
 	MYLOG(" ");
 
+   
    ////////////////////L3 writeback latency taken care off here [ARINDAM]/////////////////////////////////////////////////////////
-   UInt32 blockIndex;   //sn copied from anushree
+   //UInt32 blockIndex;   //sn copied from anushree
 
    if(m_mem_component==5)  //sn: copied from Anushree, added to increment time taken for llc write
       //A few observations [ARINDAM]:
@@ -1934,27 +1933,31 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
    {
       g_NumberOfL3WritesDueToWriteBack++; //nss
       m_master->m_cache->accessSingleLine2(address);   // created by arindam, to pass writeback information to policy
+
+      /*
       blockIndex = m_master->m_cache->getBlockIndex(address);
 
       if ((blockIndex < WAYS_TO_SRAM ))  //SRAM Blocks
-         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
-      else
-         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);  
+      else 
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);  
+      */
    }
-   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////   
+   
 
-   //printf("writeCacheBlock called by %d \n", m_mem_component); //nss
+   //printf("writeCacheBlock called by %d \n", m_mem_component); //nss   
    // TODO: should we update access counter?
 
-   if (m_master->m_evicting_buf && (address == m_master->m_evicting_address))
+   if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) 
    {
       MYLOG("writing to evict buffer %lx", address);
       assert(offset==0);
       assert(data_length==getCacheBlockSize());
       if (data_buf)
          memcpy(m_master->m_evicting_buf + offset, data_buf, data_length);
-   }
-   else
+   } 
+   else 
    {
       __attribute__((unused)) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
          address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime(thread_num), false);
@@ -1962,7 +1965,7 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
       LOG_ASSERT_ERROR(cache_block_info->getCState() == CacheState::MODIFIED, "Got writeback for non-MODIFIED line");
    }
 
-   if (m_cache_writethrough)
+   if (m_cache_writethrough) 
    {
       acquireStackLock(true);
       m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length, thread_num);

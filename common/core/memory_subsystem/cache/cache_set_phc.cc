@@ -61,6 +61,17 @@ static UInt16 lru_miss_counter = 0;
 static UInt16 totalCacheMissCounter = 0;
 static UInt16 totalCacheMissCounter_saturation = 4095;
 
+static UInt64 write_transition_counter = 0;
+static UInt64 read_transition_counter = 0;
+static UInt64 write_threshold = 10;
+static UInt64 read_threshold = 10;
+
+static UInt64 total_write_intense_blocks = 0;
+static UInt64 total_read_intense_blocks = 0;
+static UInt64 total_non_write_intense_blocks = 0;
+static UInt64 total_non_read_intense_blocks = 0;
+
+
 
 CacheSetPHC::CacheSetPHC(
       CacheBase::cache_t cache_type,
@@ -85,13 +96,45 @@ CacheSetPHC::CacheSetPHC(
       m_cost[i] = 128;  //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
    }
 
+   ////////for checing migration severity////////////////////
+   write_array = new UInt16[m_associativity];
+   for (UInt32 i = 0; i < m_associativity; i++)
+   {
+      write_array[i] = 0;
+   }
+
+   read_array = new UInt16[m_associativity];
+   for (UInt32 i = 0; i < m_associativity; i++)
+   {
+      read_array[i] = 0;
+   }
+
+   prev_write_array = new UInt16[m_associativity];
+   for (UInt32 i = 0; i < m_associativity; i++)
+   {
+      prev_write_array[i] = 0;
+   }
+
+   prev_read_array = new UInt16[m_associativity];
+   for (UInt32 i = 0; i < m_associativity; i++)
+   {
+      prev_read_array[i] = 0;
+   }
+   ///////////////////////////////////////////////////////
 }
+
+
 
 CacheSetPHC::~CacheSetPHC()
 {
    delete [] m_lru_bits;
    delete [] m_TI;
    delete [] m_cost;
+   delete [] write_array;
+   delete [] prev_write_array;
+   delete [] read_array;
+   delete [] prev_read_array;
+
 }
 
 
@@ -316,6 +359,22 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+               total_write_intense_blocks++;
+            else
+               total_non_write_intense_blocks++;
+
+            if(read_array[i]>read_threshold)
+               total_read_intense_blocks++;
+            else
+               total_non_read_intense_blocks++;
+
+
+            write_array[i] = 0;  //reset the counters on eviction
+            read_array[i] = 0;
+            prev_write_array[i] = 0;
+            prev_read_array[i] = 0;
             moveToMRU(i);
             return i;
          }
@@ -358,6 +417,21 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
+         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
+            total_write_intense_blocks++;
+         else
+            total_non_write_intense_blocks++;
+
+         if(read_array[index]>read_threshold)
+            total_read_intense_blocks++;
+         else
+            total_non_read_intense_blocks++;
+
+         write_array[index] = 0;  //reset the counters on eviction
+         read_array[index] = 0;
+         prev_write_array[index] = 0;
+         prev_read_array[index] = 0;
+
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);
          
@@ -381,6 +455,22 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             {
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+                  total_write_intense_blocks++;
+               else
+                  total_non_write_intense_blocks++;
+
+               if(read_array[i]>read_threshold)
+                  total_read_intense_blocks++;
+               else
+                  total_non_read_intense_blocks++;
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               prev_write_array[i] = 0;
+               prev_read_array[i] = 0;
+
                moveToMRU(i);
                return i;
             }
@@ -396,6 +486,22 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             { 
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+                  total_write_intense_blocks++;
+               else
+                  total_non_write_intense_blocks++;
+
+               if(read_array[i]>read_threshold)
+                  total_read_intense_blocks++;
+               else
+                  total_non_read_intense_blocks++;
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               prev_write_array[i] = 0;
+               prev_read_array[i] = 0;
+
                moveToMRU(i);
                return i;
             }
@@ -409,6 +515,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          { 
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+               total_write_intense_blocks++;
+            else
+               total_non_write_intense_blocks++;
+
+            if(read_array[i]>read_threshold)
+               total_read_intense_blocks++;
+            else
+               total_non_read_intense_blocks++;
+
+            write_array[i] = 0;  //reset the counters on eviction
+            read_array[i] = 0;
+            prev_write_array[i] = 0;
+            prev_read_array[i] = 0;
+
+               
             moveToMRU(i);
             return i;
          }
@@ -455,11 +578,29 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_state_plus[m_TI[index]]++;
          else if((m_cost[index]<Kplus) && (m_state_plus[m_TI[index]]>0))
             m_state_plus[m_TI[index]]--;
+
          Cplus[Cpluslength]=m_cost[index];
          Cpluslength++;
          
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
+            total_write_intense_blocks++;
+         else
+            total_non_write_intense_blocks++;
+
+         if(read_array[index]>read_threshold)
+            total_read_intense_blocks++;
+         else
+            total_non_read_intense_blocks++;
+
+         write_array[index] = 0;  //reset the counters on eviction
+         read_array[index] = 0;
+         prev_write_array[index] = 0;
+         prev_read_array[index] = 0;
+
+               
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);            
          return index;
@@ -482,6 +623,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             {
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+                  total_write_intense_blocks++;
+               else
+                  total_non_write_intense_blocks++;
+
+               if(read_array[i]>read_threshold)
+                  total_read_intense_blocks++;
+               else
+                  total_non_read_intense_blocks++;
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               prev_write_array[i] = 0;
+               prev_read_array[i] = 0;
+
+               
                moveToMRU(i);
                return i;
             }
@@ -497,6 +655,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             { 
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+                  total_write_intense_blocks++;
+               else
+                  total_non_write_intense_blocks++;
+
+               if(read_array[i]>read_threshold)
+                  total_read_intense_blocks++;
+               else
+                  total_non_read_intense_blocks++;
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               prev_write_array[i] = 0;
+               prev_read_array[i] = 0;
+
+               
                moveToMRU(i);
                return i;
             }
@@ -510,6 +685,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          { 
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+               total_write_intense_blocks++;
+            else
+               total_non_write_intense_blocks++;
+
+            if(read_array[i]>read_threshold)
+               total_read_intense_blocks++;
+            else
+               total_non_read_intense_blocks++;
+
+            write_array[i] = 0;  //reset the counters on eviction
+            read_array[i] = 0;
+            prev_write_array[i] = 0;
+            prev_read_array[i] = 0;
+
+               
             moveToMRU(i);
             return i;
          }
@@ -555,11 +747,29 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_state_minus[m_TI[index]]++;
          else if((m_cost[index]<Kminus) && (m_state_minus[m_TI[index]]>0))
             m_state_minus[m_TI[index]]--;
+
          Cminus[Cminuslength]=m_cost[index];
          Cminuslength++;
          
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
+            total_write_intense_blocks++;
+         else
+            total_non_write_intense_blocks++;
+
+         if(read_array[index]>read_threshold)
+            total_read_intense_blocks++;
+         else
+            total_non_read_intense_blocks++;
+
+         write_array[index] = 0;  //reset the counters on eviction
+         read_array[index] = 0;
+         prev_write_array[index] = 0;
+         prev_read_array[index] = 0;
+
+               
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);            
          return index;
@@ -585,6 +795,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             {
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+                  total_write_intense_blocks++;
+               else
+                  total_non_write_intense_blocks++;
+
+               if(read_array[i]>read_threshold)
+                  total_read_intense_blocks++;
+               else
+                  total_non_read_intense_blocks++;
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               prev_write_array[i] = 0;
+               prev_read_array[i] = 0;
+
+               
                moveToMRU(i);
                return i;
             }
@@ -600,6 +827,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             { 
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+                  total_write_intense_blocks++;
+               else
+                  total_non_write_intense_blocks++;
+
+               if(read_array[i]>read_threshold)
+                  total_read_intense_blocks++;
+               else
+                  total_non_read_intense_blocks++;
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               prev_write_array[i] = 0;
+               prev_read_array[i] = 0;
+
+               
                moveToMRU(i);
                return i;
             }
@@ -613,6 +857,23 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          { 
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
+               total_write_intense_blocks++;
+            else
+               total_non_write_intense_blocks++;
+
+            if(read_array[i]>read_threshold)
+               total_read_intense_blocks++;
+            else
+               total_non_read_intense_blocks++;
+
+            write_array[i] = 0;  //reset the counters on eviction
+            read_array[i] = 0;
+            prev_write_array[i] = 0;
+            prev_read_array[i] = 0;
+
+               
             moveToMRU(i);
             return i;
          }
@@ -658,11 +919,29 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_state[m_TI[index]]++;
          else if((m_cost[index]<K) && (m_state[m_TI[index]]>0))
             m_state[m_TI[index]]--;
+
          C[Clength]=m_cost[index];
          Clength++;
          
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
+            total_write_intense_blocks++;
+         else
+            total_non_write_intense_blocks++;
+
+         if(read_array[index]>read_threshold)
+            total_read_intense_blocks++;
+         else
+            total_non_read_intense_blocks++;
+
+         write_array[index] = 0;  //reset the counters on eviction
+         read_array[index] = 0;
+         prev_write_array[index] = 0;
+         prev_read_array[index] = 0;
+
+             
          // Mark our newly-inserted line as most-recently used
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);            
@@ -1101,11 +1380,38 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
 
    if(write_flag==1)
    {
+      //printf("write hit!! prev value of write array was %d\n", write_array[accessed_index]);
       m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
+      prev_write_array[accessed_index] = write_array[accessed_index];   //for checking transition from write intense to non write intense or vice versa
+      write_array[accessed_index]++;
+      //printf("current value of write array is %d\n", write_array[accessed_index]);
+
+      if (  (prev_write_array[accessed_index] == write_threshold) &&
+            ((write_array[accessed_index]==(write_threshold+1)))
+         )
+      {
+          write_transition_counter++;
+          //printf("write transition occurs\n");
+          
+      }
+
+
    }
    else if(write_flag==0)
    {
+      //printf("read hit!! prev value of read array was %d\n", read_array[accessed_index]);
       m_cost[accessed_index]=m_cost[accessed_index]-Er;
+      prev_read_array[accessed_index] = read_array[accessed_index];     //for checking transition from read intense to non read intense or vice versa
+      read_array[accessed_index]++;
+      //printf("current value of read array is %d\n", read_array[accessed_index]);
+
+      if (  (prev_read_array[accessed_index] == read_threshold) &&
+            ((read_array[accessed_index]==(read_threshold+1)))
+         )
+      {
+          read_transition_counter++;
+          //printf("read transition occurs\n");
+      }
    }
    else
       printf("error: value of write_flag is %d \n", write_flag);  
@@ -1118,10 +1424,24 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
 {   
     if ((accessed_index>=0) && (accessed_index<m_associativity))
     {
+      //printf("write hit!! prev value of write array was %d\n", write_array[accessed_index]);
       m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
+      prev_write_array[accessed_index] = write_array[accessed_index];   //for checking transition from write intense to non write intense or vice versa
+      write_array[accessed_index]++;
+      //printf("current value of write array is %d\n", write_array[accessed_index]);
+
+      if (  (prev_write_array[accessed_index] == write_threshold) &&
+            ((write_array[accessed_index]==(write_threshold+1)))
+         )
+      {
+          write_transition_counter++;
+          //printf("write transition occurs\n");
+      }
     }
     else 
-       printf("\nERROR!! accessed_index is %d", accessed_index);
+    {
+       //printf("\nERROR!! accessed_index is %d", accessed_index);
+    }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
