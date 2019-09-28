@@ -48,10 +48,10 @@ class CacheSetPHC : public CacheSet
       UInt8* m_cost;
       UInt16* write_array;
       UInt16* read_array;
-      UInt16* prev_write_array;
-      UInt16* prev_read_array;
+      UInt16* access_counter;
       CacheSetInfoLRU* m_set_info;
       void moveToMRU(UInt32 accessed_index);
+      UInt16 truncatedEipCalculation(IntPtr a);
 };
 
 #endif /* CACHE_SET_LRU_H */

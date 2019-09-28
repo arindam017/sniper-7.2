@@ -1,6 +1,10 @@
 #include "cache_set_phc.h"
 #include "log.h"
 #include "stats.h"
+#include "simulator.h"
+#include "config.hpp"
+#include "cache.h"
+#include "cache_set.h"
 
 
 ///////// required for dynamic cost change/////////////
@@ -29,9 +33,9 @@ UInt8 Kminus = 147;
 
 ///////// required for static cost change////////////////
 
-static UInt16 threshold_plus_miss_counter = 0;
-static UInt16 threshold_minus_miss_counter = 0;
-static UInt16 threshold_miss_counter = 0;
+//static UInt16 threshold_plus_miss_counter = 0;
+//static UInt16 threshold_minus_miss_counter = 0;
+//static UInt16 threshold_miss_counter = 0;
 
 UInt8 cost_threshold = 148;
 UInt8 cost_threshold_plus = 149;
@@ -61,15 +65,18 @@ static UInt16 lru_miss_counter = 0;
 static UInt16 totalCacheMissCounter = 0;
 static UInt16 totalCacheMissCounter_saturation = 4095;
 
-static UInt64 write_transition_counter = 0;
-static UInt64 read_transition_counter = 0;
-static UInt64 write_threshold = 10;
-static UInt64 read_threshold = 10;
 
-static UInt64 total_write_intense_blocks = 0;
-static UInt64 total_read_intense_blocks = 0;
-static UInt64 total_non_write_intense_blocks = 0;
-static UInt64 total_non_read_intense_blocks = 0;
+static UInt64 readToWriteTransitionsAtInterval = 0;
+static UInt64 writeToReadTransitionsAtInterval = 0;
+static UInt64 readToWriteTransitionsAtEviction = 0;
+static UInt64 writeToReadTransitionsAtEviction = 0;
+
+static UInt16 histogram[1000] = {0};
+static UInt8 sf = 1;
+
+static UInt8 N = 10; //interval length
+
+static UInt8  g_iteration_count         = 0;    //copied from Udal's file
 
 
 
@@ -96,31 +103,36 @@ CacheSetPHC::CacheSetPHC(
       m_cost[i] = 128;  //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
    }
 
-   ////////for checking migration severity////////////////////
-   write_array = new UInt16[m_associativity];      //write array counts the number of writes to a block
+   ////////for checing migration severity////////////////////
+   write_array = new UInt16[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       write_array[i] = 0;
    }
 
-   read_array = new UInt16[m_associativity];       //read array counts the number of reads to a block
+   read_array = new UInt16[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       read_array[i] = 0;
    }
 
-   prev_write_array = new UInt16[m_associativity]; //required to check transition
+
+   access_counter = new UInt16[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
    {
-      prev_write_array[i] = 0;
+      access_counter[i] = 0;
    }
 
-   prev_read_array = new UInt16[m_associativity];  //required to check transition
-   for (UInt32 i = 0; i < m_associativity; i++)
-   {
-      prev_read_array[i] = 0;
-   }
    ///////////////////////////////////////////////////////
+   if (0 == g_iteration_count)   //copied from Udal. This loop ensures that register stat metric is called once instead of for all the sets
+   {
+      g_iteration_count++;
+      registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Interval", &readToWriteTransitionsAtInterval);
+      registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Eviction", &readToWriteTransitionsAtEviction);
+      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Interval", &writeToReadTransitionsAtInterval);
+      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction", &writeToReadTransitionsAtEviction);
+
+   }
 }
 
 
@@ -131,10 +143,7 @@ CacheSetPHC::~CacheSetPHC()
    delete [] m_TI;
    delete [] m_cost;
    delete [] write_array;
-   delete [] prev_write_array;
    delete [] read_array;
-   delete [] prev_read_array;
-
 }
 
 
@@ -347,7 +356,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
       
    }
-   UInt16 eip_truncated=eip%256;  //truncating eip to last 12bits
+   //UInt16 eip_truncated=eip%256;  //truncating eip to last 12bits
+   UInt16 eip_truncated = truncatedEipCalculation(eip);  //this is done for generatinh hashed PC. Last 3 bytes (LSB) are XOR-ed
 
    if ((set_index % sampler_fraction)==0) //sampler set, uses lru replacement
    {
@@ -360,21 +370,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks. At eviction we do the counting
-               total_write_intense_blocks++;
-            else
-               total_non_write_intense_blocks++;
-
-            if(read_array[i]>read_threshold)
-               total_read_intense_blocks++;
-            else
-               total_non_read_intense_blocks++;
-
-
-            write_array[i] = 0;  //reset the counters on eviction
+            write_array[i] = 0;  //reset the counters on eviction. 
             read_array[i] = 0;
-            prev_write_array[i] = 0;
-            prev_read_array[i] = 0;
+            access_counter[i] = 0;
+
             moveToMRU(i);
             return i;
          }
@@ -417,20 +416,16 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
-            total_write_intense_blocks++;
-         else
-            total_non_write_intense_blocks++;
+         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
+            writeToReadTransitionsAtEviction++; //since number of reads exceed number of writes, there is a transition
+         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
+            readToWriteTransitionsAtEviction++; //since number of writes exceed number of reads, there is a transition
 
-         if(read_array[index]>read_threshold)
-            total_read_intense_blocks++;
-         else
-            total_non_read_intense_blocks++;
+         histogram[access_counter[index]]++;
+         access_counter[index] = 0;
 
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
-         prev_write_array[index] = 0;
-         prev_read_array[index] = 0;
 
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);
@@ -456,20 +451,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-                  total_write_intense_blocks++;
-               else
-                  total_non_write_intense_blocks++;
-
-               if(read_array[i]>read_threshold)
-                  total_read_intense_blocks++;
-               else
-                  total_non_read_intense_blocks++;
-
+               
                write_array[i] = 0;  //reset the counters on eviction
                read_array[i] = 0;
-               prev_write_array[i] = 0;
-               prev_read_array[i] = 0;
+               access_counter[i] = 0;
 
                moveToMRU(i);
                return i;
@@ -487,20 +472,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-                  total_write_intense_blocks++;
-               else
-                  total_non_write_intense_blocks++;
-
-               if(read_array[i]>read_threshold)
-                  total_read_intense_blocks++;
-               else
-                  total_non_read_intense_blocks++;
+               
 
                write_array[i] = 0;  //reset the counters on eviction
                read_array[i] = 0;
-               prev_write_array[i] = 0;
-               prev_read_array[i] = 0;
+               access_counter[i] = 0;
 
                moveToMRU(i);
                return i;
@@ -516,21 +492,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-               total_write_intense_blocks++;
-            else
-               total_non_write_intense_blocks++;
-
-            if(read_array[i]>read_threshold)
-               total_read_intense_blocks++;
-            else
-               total_non_read_intense_blocks++;
 
             write_array[i] = 0;  //reset the counters on eviction
             read_array[i] = 0;
-            prev_write_array[i] = 0;
-            prev_read_array[i] = 0;
-
+            access_counter[i] = 0;
                
             moveToMRU(i);
             return i;
@@ -585,21 +550,21 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
-            total_write_intense_blocks++;
-         else
-            total_non_write_intense_blocks++;
+         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
+         {
+            writeToReadTransitionsAtEviction++;
+         }
+         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
+         {
+            readToWriteTransitionsAtEviction++;
+         }
 
-         if(read_array[index]>read_threshold)
-            total_read_intense_blocks++;
-         else
-            total_non_read_intense_blocks++;
+
+         histogram[access_counter[index]]++;
+         access_counter[index] = 0;
 
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
-         prev_write_array[index] = 0;
-         prev_read_array[index] = 0;
-
                
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);            
@@ -624,21 +589,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-                  total_write_intense_blocks++;
-               else
-                  total_non_write_intense_blocks++;
-
-               if(read_array[i]>read_threshold)
-                  total_read_intense_blocks++;
-               else
-                  total_non_read_intense_blocks++;
-
+               
                write_array[i] = 0;  //reset the counters on eviction
                read_array[i] = 0;
-               prev_write_array[i] = 0;
-               prev_read_array[i] = 0;
-
+               access_counter[i] = 0;
                
                moveToMRU(i);
                return i;
@@ -656,21 +610,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-                  total_write_intense_blocks++;
-               else
-                  total_non_write_intense_blocks++;
-
-               if(read_array[i]>read_threshold)
-                  total_read_intense_blocks++;
-               else
-                  total_non_read_intense_blocks++;
 
                write_array[i] = 0;  //reset the counters on eviction
                read_array[i] = 0;
-               prev_write_array[i] = 0;
-               prev_read_array[i] = 0;
-
+               access_counter[i] = 0;
                
                moveToMRU(i);
                return i;
@@ -686,21 +629,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-               total_write_intense_blocks++;
-            else
-               total_non_write_intense_blocks++;
-
-            if(read_array[i]>read_threshold)
-               total_read_intense_blocks++;
-            else
-               total_non_read_intense_blocks++;
 
             write_array[i] = 0;  //reset the counters on eviction
             read_array[i] = 0;
-            prev_write_array[i] = 0;
-            prev_read_array[i] = 0;
-
+            access_counter[i] = 0;
                
             moveToMRU(i);
             return i;
@@ -754,21 +686,16 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
-            total_write_intense_blocks++;
-         else
-            total_non_write_intense_blocks++;
+         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
+            writeToReadTransitionsAtEviction++;
+         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
+            readToWriteTransitionsAtEviction++;
 
-         if(read_array[index]>read_threshold)
-            total_read_intense_blocks++;
-         else
-            total_non_read_intense_blocks++;
+         histogram[access_counter[index]]++;
+         access_counter[index] = 0;
 
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
-         prev_write_array[index] = 0;
-         prev_read_array[index] = 0;
-
                
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);            
@@ -796,21 +723,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-                  total_write_intense_blocks++;
-               else
-                  total_non_write_intense_blocks++;
-
-               if(read_array[i]>read_threshold)
-                  total_read_intense_blocks++;
-               else
-                  total_non_read_intense_blocks++;
+               
 
                write_array[i] = 0;  //reset the counters on eviction
                read_array[i] = 0;
-               prev_write_array[i] = 0;
-               prev_read_array[i] = 0;
-
+               access_counter[i] = 0;
                
                moveToMRU(i);
                return i;
@@ -828,21 +745,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                m_TI[i]=eip_truncated;
                m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-               if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-                  total_write_intense_blocks++;
-               else
-                  total_non_write_intense_blocks++;
-
-               if(read_array[i]>read_threshold)
-                  total_read_intense_blocks++;
-               else
-                  total_non_read_intense_blocks++;
-
+               
                write_array[i] = 0;  //reset the counters on eviction
                read_array[i] = 0;
-               prev_write_array[i] = 0;
-               prev_read_array[i] = 0;
-
+               access_counter[i] = 0;
                
                moveToMRU(i);
                return i;
@@ -858,21 +764,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_TI[i]=eip_truncated;
             m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-            if(write_array[i]>write_threshold)     //counting total read intense/ write intense blocks
-               total_write_intense_blocks++;
-            else
-               total_non_write_intense_blocks++;
-
-            if(read_array[i]>read_threshold)
-               total_read_intense_blocks++;
-            else
-               total_non_read_intense_blocks++;
-
+            
             write_array[i] = 0;  //reset the counters on eviction
             read_array[i] = 0;
-            prev_write_array[i] = 0;
-            prev_read_array[i] = 0;
-
+            access_counter[i] = 0;
                
             moveToMRU(i);
             return i;
@@ -926,21 +821,16 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
-         if(write_array[index]>write_threshold)     //counting total read intense/ write intense blocks
-            total_write_intense_blocks++;
-         else
-            total_non_write_intense_blocks++;
+         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
+            writeToReadTransitionsAtEviction++;
+         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
+            readToWriteTransitionsAtEviction++;
 
-         if(read_array[index]>read_threshold)
-            total_read_intense_blocks++;
-         else
-            total_non_read_intense_blocks++;
+         histogram[access_counter[index]]++;
+         access_counter[index] = 0;
 
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
-         prev_write_array[index] = 0;
-         prev_read_array[index] = 0;
-
              
          // Mark our newly-inserted line as most-recently used
          moveToMRU(index);
@@ -1376,72 +1266,69 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
 {
    m_set_info->increment(m_lru_bits[accessed_index]);
    moveToMRU(accessed_index);
-
-
+   access_counter[accessed_index]++;   //number of accesses to a block
    if(write_flag==1)
    {
-      //printf("write hit!! prev value of write array was %d\n", write_array[accessed_index]);
       m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
-      prev_write_array[accessed_index] = write_array[accessed_index];   //for checking transition from write intense to non write intense or vice versa
-      write_array[accessed_index]++;
-      //printf("current value of write array is %d\n", write_array[accessed_index]);
-
-      if (  (prev_write_array[accessed_index] == write_threshold) &&
-            ((write_array[accessed_index]==(write_threshold+1)))
-         )
-      {
-          write_transition_counter++;
-          //printf("write transition occurs\n");
-          
-      }
-
-
+      write_array[accessed_index]++;   //write_array is the number of writes to a block
    }
    else if(write_flag==0)
    {
-      //printf("read hit!! prev value of read array was %d\n", read_array[accessed_index]);
       m_cost[accessed_index]=m_cost[accessed_index]-Er;
-      prev_read_array[accessed_index] = read_array[accessed_index];     //for checking transition from read intense to non read intense or vice versa
-      read_array[accessed_index]++;
-      //printf("current value of read array is %d\n", read_array[accessed_index]);
-
-      if (  (prev_read_array[accessed_index] == read_threshold) &&
-            ((read_array[accessed_index]==(read_threshold+1)))
-         )
-      {
-          read_transition_counter++;
-          //printf("read transition occurs\n");
-      }
+      read_array[accessed_index]++;    //read_array is the number of reads to a block
    }
    else
-      printf("error: value of write_flag is %d \n", write_flag);  
+      printf("error: value of write_flag is %d \n", write_flag); 
+
+
+   if(access_counter[accessed_index]==N)  //after N accesses check if a previosuly predicted read intensive block has changed to write intensive block or not
+   {
+      if((accessed_index>=0) && (accessed_index<SRAM_ways) && (read_array[accessed_index]>(sf*write_array[accessed_index])))  //SRAM partition. predicted write intensive by PHC
+      {
+         writeToReadTransitionsAtInterval++;
+      }
+      if((accessed_index>=SRAM_ways) && (accessed_index<m_associativity) && (read_array[accessed_index]<(sf*write_array[accessed_index])))   //STTRAM. Read intensive
+      {
+         readToWriteTransitionsAtInterval++;
+      }
+
+      access_counter[accessed_index] = 0;
+   }
+
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 //created by arindam to pass writeback information to policy files (required in phc)
 void
 CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
-{   
-    if ((accessed_index>=0) && (accessed_index<m_associativity))
-    {
-      //printf("write hit!! prev value of write array was %d\n", write_array[accessed_index]);
-      m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
-      prev_write_array[accessed_index] = write_array[accessed_index];   //for checking transition from write intense to non write intense or vice versa
-      write_array[accessed_index]++;
-      //printf("current value of write array is %d\n", write_array[accessed_index]);
+{  
+   if ((accessed_index>=0) && (accessed_index<m_associativity))
+   {
+      access_counter[accessed_index]++;
 
-      if (  (prev_write_array[accessed_index] == write_threshold) &&
-            ((write_array[accessed_index]==(write_threshold+1)))
-         )
+      m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
+      write_array[accessed_index]++;
+
+      if(access_counter[accessed_index]==N)  //after N accesses check if a previosuly predicted read intensive block has changed to write intensive block or not
       {
-          write_transition_counter++;
-          //printf("write transition occurs\n");
+         if((accessed_index>=0) && (accessed_index<SRAM_ways) && (read_array[accessed_index]>(sf*write_array[accessed_index])))  //SRAM partition. predicted write intensive by PHC
+         {
+            writeToReadTransitionsAtInterval++;
+         }
+         if((accessed_index>=SRAM_ways) && (accessed_index<m_associativity) && (read_array[accessed_index]<(sf*write_array[accessed_index])))   //STTRAM. Predicted Read intensive
+         {
+            readToWriteTransitionsAtInterval++;
+         }
+   
+         access_counter[accessed_index] = 0;
       }
-    }
-    else 
-    {
-       //printf("\nERROR!! accessed_index is %d", accessed_index);
-    }
+
+   }
+   else 
+   {
+      //printf("\nERROR!! accessed_index is %d", accessed_index);
+   }
+
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1455,6 +1342,20 @@ CacheSetPHC::moveToMRU(UInt32 accessed_index)
          m_lru_bits[i] ++;
    }
    m_lru_bits[accessed_index] = 0;
+}
+
+UInt16 
+CacheSetPHC::truncatedEipCalculation(IntPtr a)
+{
+   UInt32 eip = a % 16777215;
+   UInt16 bit0 = eip % 256;
+   UInt32 temp1 = eip & 65280; //62580 = FF00h
+   UInt16 bit1 = temp1 >> 8;
+   UInt32 temp2 = eip & 16711680; //16711680 = FF0000h
+   UInt16 bit2 = temp2 >> 16;
+   UInt16 eip_truncated = bit2 ^ bit1 ^ bit0;
+   return eip_truncated;
+
 }
 
 
