@@ -855,7 +855,9 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if (cache_block_info)
          cache_block_info->setCState(CacheState::MODIFIED);
       else
+      {
          cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD, eip);
+      }
    }
    else if (cache_hit && m_passthrough && count)
    {
@@ -1539,7 +1541,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
    if (m_mem_component == MemComponent::L3_CACHE)
    {
    // Following code block was removed by Newton and replaced by accountForWriteLatencyOfLLC
-////////////////////////////////////////////////////////////////////////////////////////////////
+   ////////////////////////////////////////////////////////////////////////////////////////////////
    	   /*
        blockIndex = m_master->m_cache->getBlockIndex(address);
        //printf("Index:%s\n", itostr(blockIndex).c_str());
@@ -1559,7 +1561,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
                                                ShmemPerfModel::_USER_THREAD);
        }
        */
-////////////////////////////////////////////////////////////////////////////////////////////////////
+   ////////////////////////////////////////////////////////////////////////////////////////////////////
    
        accountForWriteLatencyOfLLC(address, m_master);
    }
@@ -1577,7 +1579,7 @@ MYLOG("insertCacheBlock l%d local done", m_mem_component);
 
    if (eviction)
    {
-MYLOG("evicting @%lx", evict_address);
+      MYLOG("evicting @%lx", evict_address);
 
       if (
          !m_next_cache_cntlr // Track at LLC
@@ -1707,7 +1709,7 @@ MYLOG("evicting @%lx", evict_address);
          if (evict_block_info.getCState() == CacheState::MODIFIED)
          {
             // Send back the data also
-MYLOG("evict FLUSH %lx", evict_address);
+            MYLOG("evict FLUSH %lx", evict_address);
             getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP,
                   MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
                   m_core_id /* requester */,
@@ -1718,7 +1720,7 @@ MYLOG("evict FLUSH %lx", evict_address);
          }
          else
          {
-MYLOG("evict INV %lx", evict_address);
+            MYLOG("evict INV %lx", evict_address);
             LOG_ASSERT_ERROR(evict_block_info.getCState() == CacheState::SHARED || evict_block_info.getCState() == CacheState::EXCLUSIVE,
                   "evict_address(0x%x), evict_state(%u)",
                   evict_address, evict_block_info.getCState());
@@ -1922,8 +1924,7 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
 	MYLOG(" ");
 
    
-   ////////////////////L3 writeback latency taken care off here [ARINDAM]/////////////////////////////////////////////////////////
-   //UInt32 blockIndex;   //sn copied from anushree
+   ////////////////////L3 writeback taken care off here [ARINDAM]/////////////////////////////////////////////////////////
 
    if(m_mem_component==5)  //sn: copied from Anushree, added to increment time taken for llc write
       //A few observations [ARINDAM]:
@@ -1944,9 +1945,7 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
       */
    }
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////   
-   
-
-   //printf("writeCacheBlock called by %d \n", m_mem_component); //nss   
+ 
    // TODO: should we update access counter?
 
    if (m_master->m_evicting_buf && (address == m_master->m_evicting_address)) 

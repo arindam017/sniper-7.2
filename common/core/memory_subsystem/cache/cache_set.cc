@@ -43,8 +43,7 @@ CacheSet::~CacheSet()
 }
 
 void
-CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes,
-                    bool update_replacement, UInt32 set_index)
+CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes, bool update_replacement, UInt32 set_index)
 {
    assert(offset + bytes <= m_blocksize);
    //assert((out_buff == NULL) == (bytes == 0));
@@ -56,17 +55,14 @@ CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 byt
    if (update_replacement)
    {
       //printf("updateReplacementIndex called for read hit \n"); //n
-      //PHC_Implementation: Here 2nd argument being '0' indicates that a
-      //read operation is being performed
       updateReplacementIndex(line_index, 0, set_index);
    }
 }
 
 void
-CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes,
-                     bool update_replacement, UInt32 set_index)
+CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes, bool update_replacement, UInt32 set_index)
 {
-
+   
    assert(offset + bytes <= m_blocksize);
    //assert((in_buff == NULL) == (bytes == 0));
 
@@ -77,8 +73,6 @@ CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 byt
    if (update_replacement)
    {
       //printf("updateReplacementIndex called for write hit \n"); //n
-      //PHC_Implementation: Here 2nd argument being '1' indicates that a
-      //write operation is being performed
       updateReplacementIndex(line_index, 1, set_index);
    }
 }
@@ -122,19 +116,14 @@ CacheSet::invalidate(IntPtr& tag)
    return false;
 }
 
-/////////////////PHC_Implementation: Created by arindam///////////////////////////
-//TODO: Why insert2 is implemented. insert function can have 2 additional optional parameters
-//I reviewed both the functions. I don't see any diff except value of 2 param for getReplace fx
+/////////////////created by arindam///////////////////////////
 void
-CacheSet::insert2(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction,
-                  CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr,
-                  IntPtr eip, UInt32 set_index)
-                  //PHC_Implementation: sn insert2 function is insert with additional argument
+CacheSet::insert2(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr, IntPtr eip, UInt32 set_index) //sn insert2 function is insert with additional argument
 {
    // This replacement strategy does not take into account the fact that
    // cache blocks can be voluntarily flushed or invalidated due to another write request
    const UInt32 index = getReplacementIndex(cntlr, eip, set_index);
-
+   
    assert(index < m_associativity);
 
    assert(eviction != NULL);
@@ -145,7 +134,10 @@ CacheSet::insert2(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evict
       // FIXME: This is a hack. I dont know if this is the best way to do
       evict_block_info->clone(m_cache_block_info_array[index]);   //m_cache_block_info_array[index] will be evicted. so it is cloned in evict_block_info [ARINDAM]
       if (evict_buff != NULL && m_blocks != NULL)
+      {
+         printf("just checkingggg\n");
          memcpy((void*) evict_buff, &m_blocks[index * m_blocksize], m_blocksize);
+      }
    }
    else
    {
@@ -153,8 +145,7 @@ CacheSet::insert2(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evict
    }
 
    // FIXME: This is a hack. I dont know if this is the best way to do
-   m_cache_block_info_array[index]->clone(cache_block_info);
-   //insertion occurs here mainly. cache_block_info is copied into m_cache_block_info_array[index] [ARINDAM]
+   m_cache_block_info_array[index]->clone(cache_block_info);   //insertion occurs here mainly. cache_block_info is copied into m_cache_block_info_array[index] [ARINDAM]
 
    if (fill_buff != NULL && m_blocks != NULL)
       memcpy(&m_blocks[index * m_blocksize], (void*) fill_buff, m_blocksize);
@@ -170,6 +161,7 @@ CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evicti
    // This replacement strategy does not take into account the fact that
    // cache blocks can be voluntarily flushed or invalidated due to another write request
    const UInt32 index = getReplacementIndex(cntlr, 0, 0);
+   printf("line 162\n");
    assert(index < m_associativity);
 
    assert(eviction != NULL);
@@ -323,7 +315,7 @@ CacheSet::getBlockIndexForGivenTag(IntPtr tagToFind)  //sn copied from anushree
 {
     SInt32 blockIndex = -1;
     IntPtr tagInSet;
-
+    
     for (SInt32 index = m_associativity - 1; index >= 0; index--)
     {
         tagInSet = m_cache_block_info_array[index]->getTag();
@@ -335,7 +327,6 @@ CacheSet::getBlockIndexForGivenTag(IntPtr tagToFind)  //sn copied from anushree
         }
     }
 
-    //Are set still getting this assertion failing
     //assert(blockIndex != -1);
     return blockIndex;
 }

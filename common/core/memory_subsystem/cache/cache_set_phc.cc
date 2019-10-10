@@ -20,11 +20,11 @@ static UInt16 Mminus = 0;
 static UInt16 M0 = 0;
 
 static UInt8 C[4096] = {0};            //evicted Cost set for K0
-static UInt16 Clength = 0;             //length of Cost set for K0
+UInt16 Clength = 0;             //length of Cost set for K0
 static UInt8 Cplus[4096] = {0};        //evicted Cost set for K+
-static UInt16 Cpluslength = 0;         //length of Cost set for K+
+UInt16 Cpluslength = 0;         //length of Cost set for K+
 static UInt8 Cminus[4096] = {0};       //evicted Cost set for K-
-static UInt16 Cminuslength = 0;        //length of Cost set for K-
+UInt16 Cminuslength = 0;        //length of Cost set for K-
 
 UInt8 K = 148;                         //thresholds. Same as k, K+ and K- in paper
 UInt8 Kplus = 149;
@@ -74,7 +74,7 @@ static UInt64 writeToReadTransitionsAtEviction = 0;
 static UInt16 histogram[1000] = {0};
 static UInt8 sf = 1;
 
-static UInt8 N = 10; //interval length
+static UInt8 N_transition = 1; //interval length for wrti, rwti calculation
 
 static UInt8  g_iteration_count         = 0;    //copied from Udal's file
 
@@ -126,6 +126,8 @@ CacheSetPHC::CacheSetPHC(
    ///////////////////////////////////////////////////////
    if (0 == g_iteration_count)   //copied from Udal. This loop ensures that register stat metric is called once instead of for all the sets
    {
+      printf("\n\nInterval length for phase change is %d and interval length for wrti is %d\n", totalCacheMissCounter_saturation, N_transition);
+      printf("Associativity is %d and SRAM ways are %d\n\n\n", m_associativity, SRAM_ways);
       g_iteration_count++;
       registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Interval", &readToWriteTransitionsAtInterval);
       registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Eviction", &readToWriteTransitionsAtEviction);
@@ -151,9 +153,11 @@ UInt32
 CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index)   //implements dynamic threshold;both sampler and non sampler has cost;overhead is high; DYNAMIC COST CHANGE
 {
    totalCacheMissCounter++;
+   //printf("totalCacheMissCounter is %d, Clength, Cpluslength and Cminuslength are %d, %d, %d \n",totalCacheMissCounter, Clength, Cpluslength, Cminuslength);
+   
    if (totalCacheMissCounter == totalCacheMissCounter_saturation) //phase change
    {
-   	  //sorting the array
+   	//sorting the array
       int swap;
       for (int cc = 0 ; cc < (Clength-1); cc++)
       {
@@ -202,8 +206,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                break;
             }
          }
-         CplusK = C[j];
-           
+         CplusK = C[j];     
       }
 
 
@@ -352,13 +355,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          Cplus[j]=0;
          Cminus[j]=0;
       }
-
-
-      
+   
    }
+   
    //UInt16 eip_truncated=eip%256;  //truncating eip to last 12bits
-   UInt16 eip_truncated = truncatedEipCalculation(eip);  //this is done for generatinh hashed PC. Last 3 bytes (LSB) are XOR-ed
-
+   UInt16 eip_truncated = truncatedEipCalculation(eip);  //this is done for generating hashed PC. Last 3 bytes (LSB) are XOR-ed
    if ((set_index % sampler_fraction)==0) //sampler set, uses lru replacement
    {
       for (UInt32 i = 0; i < m_associativity; i++)
@@ -437,7 +438,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    }
 
    else if ((set_index % sampler_fraction)==1)  //sampler set using Kplus and m_state_plus
-   { 
+   {
       Mplus++;
      
       //finding out invalid blocks
@@ -532,6 +533,9 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
+            //call function (migrate(index)) here
+            migrate(index);
+            //m_cache_block_info_array[9]->clone(m_cache_block_info_array[3]);
          }
 
 
@@ -669,6 +673,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
+            migrate(index);
          }
 
 
@@ -706,7 +711,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    }
 
    else //non-sampler set, uses phc
-   {
+   {  
+
       if((set_index % sampler_fraction)==3)  //sampler set for calculating misses on current threshold
       {
          M0++;
@@ -714,8 +720,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
       //finding out invalid blocks
       if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
-      {
-         
+      { 
          for (UInt32 i = SRAM_ways; i < m_associativity; i++)
          {
             if (!m_cache_block_info_array[i]->isValid())
@@ -730,6 +735,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                
                moveToMRU(i);
+               //printf("invalid block found in sttram\n");
                return i;
             }
       
@@ -751,11 +757,12 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                
                moveToMRU(i);
+               //printf("invalid block found in sram\n");
                return i;
             }
          }
       }
-   
+      
       //trying to find an invalid block if it is present but not in the proper partition
       for (UInt32 i = 0; i < m_associativity; i++)
       {
@@ -770,10 +777,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             access_counter[i] = 0;
                
             moveToMRU(i);
+            //printf("invalid block found, but not in proper partition\n");
             return i;
          }
       }
-
 
       //INVALID BLOCK NOT FOUND
       // Make m_num_attemps attempts at evicting the block at LRU position
@@ -804,6 +811,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
+            migrate(index);
          }
 
 
@@ -834,7 +842,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
              
          // Mark our newly-inserted line as most-recently used
          moveToMRU(index);
-         m_set_info->incrementAttempt(attempt);            
+         m_set_info->incrementAttempt(attempt);           
          return index;
          
       } 
@@ -1281,7 +1289,7 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
       printf("error: value of write_flag is %d \n", write_flag); 
 
 
-   if(access_counter[accessed_index]==N)  //after N accesses check if a previosuly predicted read intensive block has changed to write intensive block or not
+   if(access_counter[accessed_index]==N_transition)  //after N accesses check if a previosuly predicted read intensive block has changed to write intensive block or not
    {
       if((accessed_index>=0) && (accessed_index<SRAM_ways) && (read_array[accessed_index]>(sf*write_array[accessed_index])))  //SRAM partition. predicted write intensive by PHC
       {
@@ -1297,11 +1305,12 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
 
 }
 
+
 //////////////////////////////////////////////////////////////////////////////////////////////
 //created by arindam to pass writeback information to policy files (required in phc)
 void
 CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
-{  
+{ 
    if ((accessed_index>=0) && (accessed_index<m_associativity))
    {
       access_counter[accessed_index]++;
@@ -1309,7 +1318,7 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
       m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
       write_array[accessed_index]++;
 
-      if(access_counter[accessed_index]==N)  //after N accesses check if a previosuly predicted read intensive block has changed to write intensive block or not
+      if(access_counter[accessed_index]==N_transition)  //after N accesses check if a previosuly predicted read intensive block has changed to write intensive block or not
       {
          if((accessed_index>=0) && (accessed_index<SRAM_ways) && (read_array[accessed_index]>(sf*write_array[accessed_index])))  //SRAM partition. predicted write intensive by PHC
          {
@@ -1356,6 +1365,73 @@ CacheSetPHC::truncatedEipCalculation(IntPtr a)
    UInt16 eip_truncated = bit2 ^ bit1 ^ bit0;
    return eip_truncated;
 
+}
+
+/*
+
+migrate(index)	//here index is the sram block to be evicted
+{
+	find out lru in sttram position. say it has index of stt_index
+	copy tag from index to stt_index
+	m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[index]);
+	copy lru_bits, TI, cost etc from index to stt_index
+
+
+}
+
+*/
+void
+CacheSetPHC::migrate(UInt32 sram_index)
+{
+	UInt32 stt_index = 0;
+	UInt8 local_max_bits = 0;
+	CacheBlockInfo* temp_cache_block_info;
+	/*
+	UInt8 temp_lru_bits;
+	UInt16 temp_TI;
+	UInt8 temp_cost;
+	UInt16 temp_write_array;
+	UInt16 temp_read_array;
+	UInt16 temp_access_counter;
+	*/
+
+	//find stt_index
+	for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+    {
+        if (m_lru_bits[i] > local_max_bits && isValidReplacement(i))
+        {
+            stt_index = i;
+            local_max_bits = m_lru_bits[i];
+        }
+    }
+    printf("stt_index is %d, SRAM_ways are %d and m_associativity is %d\n", stt_index, SRAM_ways, m_associativity);
+		
+	
+	if((stt_index>=SRAM_ways) && (stt_index<m_associativity))
+	{
+		printf("yoo1\n");
+		temp_cache_block_info->clone(m_cache_block_info_array[stt_index]);
+		printf("yoo2\n");
+		m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[sram_index]);
+		printf("yoo3\n");
+		m_cache_block_info_array[sram_index]->clone(temp_cache_block_info);
+	
+		printf("yoo4\n");
+	
+		m_lru_bits[stt_index] = m_lru_bits[sram_index];
+	 
+	    m_TI[stt_index] = m_TI[sram_index]; 
+	 
+	    m_cost[stt_index] = m_cost[sram_index]; 
+	 
+	    write_array[stt_index] = write_array[sram_index];
+	 
+	    read_array[stt_index] = read_array[sram_index];
+	 
+	    access_counter[stt_index] = access_counter[sram_index];
+
+	}
+	
 }
 
 

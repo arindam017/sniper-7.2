@@ -52,6 +52,7 @@ class CacheSetPHC : public CacheSet
       CacheSetInfoLRU* m_set_info;
       void moveToMRU(UInt32 accessed_index);
       UInt16 truncatedEipCalculation(IntPtr a);
+      void migrate(UInt32 sram_index);
 };
 
 #endif /* CACHE_SET_LRU_H */
