@@ -129,9 +129,7 @@ Cache::accessSingleLine2(IntPtr addr)
    IntPtr tag;
    UInt32 set_index;
    UInt32 line_index = -1;
-   //UInt32 block_offset;
 
-   //splitAddress(addr, tag, set_index, block_offset);
    splitAddress(addr, tag, set_index);
    CacheSet* set = m_sets[set_index];
    CacheBlockInfo* cache_block_info = set->find(tag, &line_index);

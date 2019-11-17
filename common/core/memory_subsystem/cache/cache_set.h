@@ -71,6 +71,7 @@ class CacheSet
 
       /* Returns the index of the block which can be evicted */  
       UInt32 getBlockIndexForGivenTag(IntPtr tagToFind);
+
 };
 
 #endif /* CACHE_SET_H */

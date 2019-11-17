@@ -33,6 +33,8 @@ static UInt64 g_costSTTRAM;
 
 static UInt64 g_NumberL2WritebacksToL3;
 
+extern UInt8 migrate_flag;
+
 /* If the flag is true, it indicates that a block from LLC is getting evicted.
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
  */
@@ -188,6 +190,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
        printf("========================\n");
        printf("m_writeback_time:%s\n", itostr(m_writeback_time.getLatency()).c_str());
        printf("m_data_write_time:%s\n", itostr(m_data_write_time.getLatency()).c_str());
+       printf("WAYS_TO_SRAM: %d\n", WAYS_TO_SRAM);
        printf("========================\n");
    }
 
@@ -371,8 +374,6 @@ CacheCntlr::processMemOpFromCore(
       bool count,
       IntPtr eip) //sn eip(PC) added by arindam
 {
-
-   //printf("processMemOpFromCore is called and eip is: %" PRIxPTR "\n", eip);  //ssn
    eip_global_2=eip;
    HitWhere::where_t hit_where = HitWhere::MISS;
 
@@ -831,7 +832,6 @@ void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* m
 HitWhere::where_t
 CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool count, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock, IntPtr eip)   //sn eip added by arindam
 {
-
    #ifdef PRIVATE_L2_OPTIMIZATION
    bool have_write_lock_internal = have_write_lock;
    if (! have_write_lock && m_shared_cores > 1)
@@ -1538,32 +1538,20 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
          getShmemPerfModel()->getElapsedTime(thread_num), this, m_mem_component, eip);
    SharedCacheBlockInfo* cache_block_info = setCacheState(address, cstate);
 
-   if (m_mem_component == MemComponent::L3_CACHE)
-   {
-   // Following code block was removed by Newton and replaced by accountForWriteLatencyOfLLC
-   ////////////////////////////////////////////////////////////////////////////////////////////////
-   	   /*
-       blockIndex = m_master->m_cache->getBlockIndex(address);
-       //printf("Index:%s\n", itostr(blockIndex).c_str());
-
-       //if index is 0,1,2,3,4 it is SRAM block, else it is STTRAM block 
-       if (blockIndex <= (WAYS_TO_SRAM - 1))
-       {
-           getMemoryManager()->incrElapsedTime(m_mem_component,
-                                               CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
-                                               ShmemPerfModel::_USER_THREAD);
-       }
-       else if (blockIndex > (WAYS_TO_SRAM - 1))
-       {
-           //printf("Index:%s\n", itostr(blockIndex).c_str());
-           getMemoryManager()->incrElapsedTime(m_mem_component,
-                                               CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
-                                               ShmemPerfModel::_USER_THREAD);
-       }
-       */
-   ////////////////////////////////////////////////////////////////////////////////////////////////////
    
-       accountForWriteLatencyOfLLC(address, m_master);
+   // Defined by ARINDAM. Accounts for extra penalty when a living block is 
+   // evicted from SRAM and is preserved in STTRAM (done in PHC)
+   if(migrate_flag==1)
+   {
+      getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+      migrate_flag = 0;
+   }
+   
+   
+
+   if (m_mem_component == MemComponent::L3_CACHE)
+   {   
+      accountForWriteLatencyOfLLC(address, m_master);
    }
 
    if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
@@ -1933,7 +1921,7 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
       //3. In case of insertCacheBlock, it is the writeback after eviction scenario
    {
       g_NumberOfL3WritesDueToWriteBack++; //nss
-      m_master->m_cache->accessSingleLine2(address);   // created by arindam, to pass writeback information to policy
+      //m_master->m_cache->accessSingleLine2(address);   // created by arindam, to pass writeback information to policy
 
       /*
       blockIndex = m_master->m_cache->getBlockIndex(address);
