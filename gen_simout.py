@@ -95,8 +95,8 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
 #  if 'interval_timer.Write_To_Read_Transitions_At_Interval' in results:
 #    results['interval_timer.Write_To_Read_Transitions_At_Interval'] = [float(results['interval_timer.Write_To_Read_Transitions_At_Interval'][core] or 1) for core in range(ncores)]
 
-#  if 'interval_timer.Write_To_Read_Transitions_At_Eviction' in results:
-#    results['interval_timer.Write_To_Read_Transitions_At_Eviction'] = [float(results['interval_timer.Write_To_Read_Transitions_At_Eviction'][core] or 1) for core in range(ncores)]
+  if 'interval_timer.Write_To_Read_Transitions_At_Eviction' in results:
+    results['interval_timer.Write_To_Read_Transitions_At_Eviction'] = [float(results['interval_timer.Write_To_Read_Transitions_At_Eviction'][core] or 1) for core in range(ncores)]
 
   if 'interval_timer.Read_Intense_Block_Counter' in results:
     results['interval_timer.Read_Intense_Block_Counter'] = [float(results['interval_timer.Read_Intense_Block_Counter'][core] or 1) for core in range(ncores)]
@@ -132,7 +132,7 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     #('  Read to Write Transition Count at an Interval',     'interval_timer.Read_To_Write_Transitions_At_Interval', format_int),
     #('  Read to Write Transition Count at an Eviction',     'interval_timer.Read_To_Write_Transitions_At_Eviction', format_int),
     #('  Write to Read Transition Count at an Interval',     'interval_timer.Write_To_Read_Transitions_At_Interval', format_int),
-    #('  Write to Read Transition Count at an Eviction',     'interval_timer.Write_To_Read_Transitions_At_Eviction', format_int),
+    ('  Write to Read Transition Count at an Eviction',     'interval_timer.Write_To_Read_Transitions_At_Eviction', format_int),
 
     ('  Read Intense Block Counter',     'interval_timer.Read_Intense_Block_Counter', format_int),
     ('  Write Intense Block Counter',     'interval_timer.Write_Intense_Block_Counter', format_int),

@@ -26,16 +26,23 @@ UInt8 CplusKminus = 255;				//C+(K-)
 UInt8 CminusKplus = 0;					//C-(K+)
 UInt8 CminusKminus = 0;					//C-(K-)
 
+UInt8 Cmax = 128;
+UInt8 Cmin = 128;
+UInt8 Cplusmax = 128;
+UInt8 Cplusmin = 128;
+UInt8 Cminusmax = 128;
+UInt8 Cminusmin = 128;
+
 static UInt16 Mplus = 0;               //counters. Same as M0, M+ and M- in paper
 static UInt16 Mminus = 0;
 static UInt16 M0 = 0;
 
 static UInt8 C[4096] = {0};            //evicted Cost set for K0
-UInt16 Clength = 0;             //length of Cost set for K0
+UInt16 Clength = 0;                    //length of Cost set for K0
 static UInt8 Cplus[4096] = {0};        //evicted Cost set for K+
-UInt16 Cpluslength = 0;         //length of Cost set for K+
+UInt16 Cpluslength = 0;                //length of Cost set for K+
 static UInt8 Cminus[4096] = {0};       //evicted Cost set for K-
-UInt16 Cminuslength = 0;        //length of Cost set for K-
+UInt16 Cminuslength = 0;               //length of Cost set for K-
 
 UInt8 K = 148;                         //thresholds. Same as k, K+ and K- in paper
 UInt8 Kplus = 149;
@@ -81,7 +88,7 @@ static UInt8 asl2_flag = 0;
 static UInt16 lru_miss_counter = 0;
 
 static UInt16 totalCacheMissCounter = 0;
-static UInt16 totalCacheMissCounter_saturation = 4095;
+static UInt16 totalCacheMissCounter_saturation = 131071;
 
 
 static UInt64 readToWriteTransitionsAtInterval = 0;
@@ -163,12 +170,12 @@ CacheSetPHC::CacheSetPHC(
    if (0 == g_iteration_count)   //copied from Udal. This loop ensures that register stat metric is called once instead of for all the sets
    {
       //printf("\n\nInterval length for phase change is %d and interval length for wrti is %d\n", totalCacheMissCounter_saturation, N_transition);
-      printf("Associativity is %d and SRAM ways are %d\n\n\n", m_associativity, SRAM_ways);
+      printf("Associativity is %d, SRAM ways are %d\n\n\n", m_associativity, SRAM_ways);
       g_iteration_count++;
       //registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Interval", &readToWriteTransitionsAtInterval);
       //registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Eviction", &readToWriteTransitionsAtEviction);
       //registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Interval", &writeToReadTransitionsAtInterval);
-      //registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction", &writeToReadTransitionsAtEviction);
+      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction", &writeToReadTransitionsAtEviction);
       registerStatsMetric("interval_timer", 0 , "Read_Intense_Block_Counter", &read_intense_block_counter);
       registerStatsMetric("interval_timer", 0 , "Write_Intense_Block_Counter", &write_intense_block_counter);
       registerStatsMetric("interval_timer", 0 , "Deadblock_Counter", &deadblock_counter);
@@ -195,9 +202,22 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 {
    totalCacheMissCounter++;
    //printf("totalCacheMissCounter is %d, Clength, Cpluslength and Cminuslength are %d, %d, %d \n",totalCacheMissCounter, Clength, Cpluslength, Cminuslength);
+   //printf("totalCacheMissCounter is %d, Cplusmax, Cplusmin, Cminusmax, Cminusmin, Cmax, Cmin are %d, %d, %d, %d, %d, %d \n",totalCacheMissCounter, Cplusmax, Cplusmin, Cminusmax, Cminusmin, Cmax, Cmin);
+   //printf("K is %d, Kplus is %d and Kminus is %d\n", K, Kplus, Kminus);
+
    if (totalCacheMissCounter == totalCacheMissCounter_saturation) //phase change
    {
-   	//sorting the array
+
+
+
+
+
+
+
+      /*
+
+
+   	//sorting the c array
       int swap;
       for (int cc = 0 ; cc < (Clength-1); cc++)
       {
@@ -212,10 +232,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          }
       }
 
-
+      //the c array is sorted at this point
       for(int j=1; j<Clength; j++)           //why starting from j=1?? If we get threshold match at K=0, we cant put CminusK as C[-1]
       {
-         if(C[0]>K)                          //all members are greater than K
+         if(C[0]>K)                          //all members of c are greater than K
          {
             CminusK = K;
             break;
@@ -355,6 +375,71 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          CplusKminus = Cminus[j];
            
       }
+      
+      */
+
+
+
+
+
+      ///////////////////////////////////////////////////////
+
+      //finding out CminusK
+      if(Cmin<K)  //at least one member is smaller than K
+         CminusK = Cmax;
+      else 
+         CminusK = K;
+
+      //finding out CplusK
+      if(Cmax>K)  //at least one member is greater than K
+         CplusK = Cmin;
+      else 
+         CplusK = K;
+
+      ///////////////////////////////////////////////////////
+
+      //finding out CminusKminus
+      if(Cminusmin<Kminus)
+         CminusKminus = Cminusmax;
+      else 
+         CminusKminus = Kminus;
+
+      //finding out CplusKminus
+      if(Cminusmax>Kminus)
+         CplusKminus = Cminusmin;
+      else 
+         CplusKminus = Kminus;
+
+      ///////////////////////////////////////////////////////
+
+      //finding out CminusKplus
+      if(Cplusmin<Kplus)
+         CminusKplus = Cplusmax;
+      else
+         CminusKplus = Kplus;
+
+      //finding out CplusKplus
+      if(Cplusmax>Kplus)
+         CplusKplus = Cplusmin;
+      else 
+         CplusKplus = Kplus;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       /////////////////////////////////////////////////////////////////////////////////
 
@@ -384,6 +469,13 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       Mminus = 0;
       M0 = 0;
       totalCacheMissCounter = 0;
+
+      Cmax = 128;
+      Cmin = 128;
+      Cplusmax = 128;
+      Cplusmin = 128;
+      Cminusmax = 128;
+      Cminusmin = 128;
       
       Clength = 0;
       Cpluslength = 0;
@@ -613,6 +705,14 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
          Cplus[Cpluslength]=m_cost[index];
          Cpluslength++;
+
+         //Calculating Cplusmax and Cplusmin
+         if(m_cost[index]<Cplusmin)
+            Cplusmin = m_cost[index];
+         if(m_cost[index]>Cplusmax)
+            Cplusmax = m_cost[index];
+
+
          
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
@@ -758,7 +858,15 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
          Cminus[Cminuslength]=m_cost[index];
          Cminuslength++;
+
+         //Calculating Cminusmax and Cminusmin
+         if(m_cost[index]<Cminusmin)
+            Cminusmin = m_cost[index];
+         if(m_cost[index]>Cminusmax)
+            Cminusmax = m_cost[index];
          
+
+
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
@@ -908,19 +1016,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          
          
          //check if the victim block is read intense, or write intense or deadblock
-         /* 
-         if(m_cost[index]<K)  //cold TIs are most probably read intensive
-            read_intense_block_counter++;  
-         else if((m_cost[index]>=K)&&(m_dcnt[m_TI[index]]<dcnt_threshold))  //non read intensive and non deadblock, hence mostly write intensive. dcnt method
-         //else if((m_cost[index]>=K)&&(m_deadblock[index]==1))  //non read intensive and non deadblock, hence mostly write intensive. daaip method
-            write_intense_block_counter++;
-         else if((m_cost[index]>=K) && (m_dcnt[m_TI[index]]>=dcnt_threshold)) // dcnt method
-         //else if((m_cost[index]>=K)&&(m_deadblock[index]==0)) // daaip method
-            deadblock_counter++;
-         else
-            printf("ERROR!!!!!!\n");
-         */
-         
+
          if(m_dcnt[m_TI[index]]>=dcnt_threshold)   //deadblock
             deadblock_counter++;
          else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]<K))  //read_intense
@@ -934,6 +1030,13 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
          C[Clength]=m_cost[index];
          Clength++;
+
+         //Calculating Cmax and Cmin
+         //printf("m_cost[index] is %d and Cmin is %d\n", m_cost[index], Cmin);
+         if(m_cost[index]<Cmin)
+            Cmin = m_cost[index];
+         if(m_cost[index]>Cmax)
+            Cmax = m_cost[index];
          
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
@@ -1103,8 +1206,8 @@ CacheSetPHC::migrate(UInt32 sram_index)
    UInt16 temp_access_counter = 0;
    UInt8 temp_deadblock = 0;
 	
-	//if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)     //PC based deadblock prediction
-   if(m_deadblock[sram_index]!=0)                 //Newton's deadblock prediction
+	if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)     //PC based deadblock prediction
+   //if(m_deadblock[sram_index]!=0)                 //Newton's deadblock prediction
    {
       //find stt_index
       for (UInt32 i = SRAM_ways; i < m_associativity; i++)
