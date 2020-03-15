@@ -96,6 +96,10 @@ static UInt8 N_transition = 1; //interval length for wrti, rwti calculation
 
 static UInt8  g_iteration_count         = 0;    //copied from Udal's file
 
+static UInt64 read_intense_block_counter = 0;
+static UInt64 write_intense_block_counter = 0;
+static UInt64 deadblock_counter = 0;
+
 
 
 CacheSetPHC::CacheSetPHC(
@@ -158,13 +162,16 @@ CacheSetPHC::CacheSetPHC(
    ///////////////////////////////////////////////////////
    if (0 == g_iteration_count)   //copied from Udal. This loop ensures that register stat metric is called once instead of for all the sets
    {
-      printf("\n\nInterval length for phase change is %d and interval length for wrti is %d\n", totalCacheMissCounter_saturation, N_transition);
+      //printf("\n\nInterval length for phase change is %d and interval length for wrti is %d\n", totalCacheMissCounter_saturation, N_transition);
       printf("Associativity is %d and SRAM ways are %d\n\n\n", m_associativity, SRAM_ways);
       g_iteration_count++;
-      registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Interval", &readToWriteTransitionsAtInterval);
-      registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Eviction", &readToWriteTransitionsAtEviction);
-      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Interval", &writeToReadTransitionsAtInterval);
-      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction", &writeToReadTransitionsAtEviction);
+      //registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Interval", &readToWriteTransitionsAtInterval);
+      //registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Eviction", &readToWriteTransitionsAtEviction);
+      //registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Interval", &writeToReadTransitionsAtInterval);
+      //registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction", &writeToReadTransitionsAtEviction);
+      registerStatsMetric("interval_timer", 0 , "Read_Intense_Block_Counter", &read_intense_block_counter);
+      registerStatsMetric("interval_timer", 0 , "Write_Intense_Block_Counter", &write_intense_block_counter);
+      registerStatsMetric("interval_timer", 0 , "Deadblock_Counter", &deadblock_counter);
 
    }
 }
@@ -188,7 +195,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 {
    totalCacheMissCounter++;
    //printf("totalCacheMissCounter is %d, Clength, Cpluslength and Cminuslength are %d, %d, %d \n",totalCacheMissCounter, Clength, Cpluslength, Cminuslength);
-   
    if (totalCacheMissCounter == totalCacheMissCounter_saturation) //phase change
    {
    	//sorting the array
@@ -389,8 +395,21 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          Cplus[j]=0;
          Cminus[j]=0;
       }
+
+      //printf("RI = %d, WI = %d and deadblocks = %d before averaging\n", read_intense_block_counter, write_intense_block_counter, deadblock_counter);
    
+      read_intense_block_counter = read_intense_block_counter/2;
+      write_intense_block_counter = write_intense_block_counter/2;
+      deadblock_counter = deadblock_counter/2;
+      //printf("RI = %d, WI = %d and deadblocks = %d after averaging\n", read_intense_block_counter, write_intense_block_counter, deadblock_counter);
+   
+      //printf("\n/////////////////////////////////\n");
+
    }
+   
+
+
+
    
    //UInt16 eip_truncated=eip%256;  //truncating eip to last 12bits
    UInt16 eip_truncated = truncatedEipCalculation(eip);  //this is done for generating hashed PC. Last 5 bytes (LSB) are XOR-ed
@@ -578,7 +597,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
             }
             //call function (migrate(index)) here
-            //migrate(index);
+            migrate(index);
             
          }
 
@@ -725,7 +744,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
-            //migrate(index);
+            migrate(index);
          }
 
 
@@ -769,7 +788,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
    else //non-sampler set, uses phc
    {  
-
+      //printf("non-sampler\n");
       if((set_index % sampler_fraction)==3)  //sampler set for calculating misses on current threshold
       {
          M0++;
@@ -841,13 +860,15 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             return i;
          }
       }
-
+      
       //INVALID BLOCK NOT FOUND
       // Make m_num_attemps attempts at evicting the block at LRU position
       for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
       {
          UInt32 index = 0;
          UInt8 max_bits = 0;
+
+         //printf("invalid block not found\n");
 
          if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
          {
@@ -871,7 +892,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
-            //migrate(index);
+            migrate(index);
          }
 
 
@@ -882,6 +903,34 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_state[m_TI[index]]++;
          else if((m_cost[index]<K) && (m_state[m_TI[index]]>0))
             m_state[m_TI[index]]--;
+
+         //printf("eviction\n");
+         
+         
+         //check if the victim block is read intense, or write intense or deadblock
+         /* 
+         if(m_cost[index]<K)  //cold TIs are most probably read intensive
+            read_intense_block_counter++;  
+         else if((m_cost[index]>=K)&&(m_dcnt[m_TI[index]]<dcnt_threshold))  //non read intensive and non deadblock, hence mostly write intensive. dcnt method
+         //else if((m_cost[index]>=K)&&(m_deadblock[index]==1))  //non read intensive and non deadblock, hence mostly write intensive. daaip method
+            write_intense_block_counter++;
+         else if((m_cost[index]>=K) && (m_dcnt[m_TI[index]]>=dcnt_threshold)) // dcnt method
+         //else if((m_cost[index]>=K)&&(m_deadblock[index]==0)) // daaip method
+            deadblock_counter++;
+         else
+            printf("ERROR!!!!!!\n");
+         */
+         
+         if(m_dcnt[m_TI[index]]>=dcnt_threshold)   //deadblock
+            deadblock_counter++;
+         else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]<K))  //read_intense
+            read_intense_block_counter++;
+         else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]>=K))  //write_intense
+            write_intense_block_counter++;
+         else
+            printf("ERROR!!!!!!\n");
+
+
 
          C[Clength]=m_cost[index];
          Clength++;
@@ -907,6 +956,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
          if(m_dcnt[m_TI[index]] != 255)
             m_dcnt[m_TI[index]]++;  //increment deadblock counter on eviction
+       
 
          return index;
          
@@ -1023,7 +1073,7 @@ CacheSetPHC::moveToMRU(UInt32 accessed_index)
 }
 
 UInt16 
-CacheSetPHC::truncatedEipCalculation(IntPtr a)
+CacheSetPHC::truncatedEipCalculation(IntPtr a)  //hashing
 {
    UInt16 temp3, temp2; 
    temp3 = a % 256;
@@ -1053,8 +1103,8 @@ CacheSetPHC::migrate(UInt32 sram_index)
    UInt16 temp_access_counter = 0;
    UInt8 temp_deadblock = 0;
 	
-	if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)     //PC based deadblock prediction
-   //if(m_deadblock[sram_index]!=0)                 //Newton's deadblock prediction
+	//if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)     //PC based deadblock prediction
+   if(m_deadblock[sram_index]!=0)                 //Newton's deadblock prediction
    {
       //find stt_index
       for (UInt32 i = SRAM_ways; i < m_associativity; i++)
@@ -1067,6 +1117,7 @@ CacheSetPHC::migrate(UInt32 sram_index)
       }
       
       if((stt_index>=SRAM_ways) && (stt_index<m_associativity))
+      //swapping the blocks with index as stt_index and sram_index   
       {
          temp_cache_block_info->clone(m_cache_block_info_array[stt_index]);
          m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[sram_index]);
@@ -1096,7 +1147,7 @@ CacheSetPHC::migrate(UInt32 sram_index)
          access_counter[stt_index] = temp_access_counter;
          m_deadblock[stt_index] = temp_deadblock;
 
-         migrate_flag = 1; //This will be cross checked in cache controller inside insertCacheBlock function, to account for penalty
+         //migrate_flag = 1; //This will be cross checked in cache controller inside insertCacheBlock function, to account for penalty
       }
 
    }

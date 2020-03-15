@@ -1541,11 +1541,13 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
    
    // Defined by ARINDAM. Accounts for extra penalty when a living block is 
    // evicted from SRAM and is preserved in STTRAM (done in PHC)
+   /*
    if(migrate_flag==1)
    {
-      getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+      //getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       migrate_flag = 0;
    }
+   */
    
    
 
@@ -1921,7 +1923,7 @@ CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt3
       //3. In case of insertCacheBlock, it is the writeback after eviction scenario
    {
       g_NumberOfL3WritesDueToWriteBack++; //nss
-      //m_master->m_cache->accessSingleLine2(address);   // created by arindam, to pass writeback information to policy
+      m_master->m_cache->accessSingleLine2(address);   // created by arindam, to pass writeback information to policy
 
       /*
       blockIndex = m_master->m_cache->getBlockIndex(address);
