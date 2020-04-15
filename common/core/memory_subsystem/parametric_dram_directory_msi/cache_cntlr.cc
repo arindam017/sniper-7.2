@@ -39,7 +39,7 @@ extern UInt8 migrate_flag;
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
  */
 //#define WAYS_TO_SRAM    4
-#define WAYS_TO_SRAM    4
+#define WAYS_TO_SRAM    16
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -808,7 +808,7 @@ void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* m
 {
     UInt32 blockIndex = master->m_cache->getBlockIndex(address);
 
-    //if index is 0,1,2,3,4 it is SRAM block, else STTRAM block
+    //if index is 0,1,2,3 it is SRAM block, else STTRAM block
     if (blockIndex <= (WAYS_TO_SRAM - 1))
     {
         getMemoryManager()->incrElapsedTime(m_mem_component,

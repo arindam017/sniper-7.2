@@ -38,11 +38,11 @@ static UInt16 Mminus = 0;
 static UInt16 M0 = 0;
 
 static UInt8 C[4096] = {0};            //evicted Cost set for K0
-UInt16 Clength = 0;                    //length of Cost set for K0
+//UInt16 Clength = 0;                    //length of Cost set for K0
 static UInt8 Cplus[4096] = {0};        //evicted Cost set for K+
-UInt16 Cpluslength = 0;                //length of Cost set for K+
+//UInt16 Cpluslength = 0;                //length of Cost set for K+
 static UInt8 Cminus[4096] = {0};       //evicted Cost set for K-
-UInt16 Cminuslength = 0;               //length of Cost set for K-
+//UInt16 Cminuslength = 0;               //length of Cost set for K-
 
 UInt8 K = 148;                         //thresholds. Same as k, K+ and K- in paper
 UInt8 Kplus = 149;
@@ -65,8 +65,8 @@ UInt8 cost_threshold_minus = 147;
 UInt8 Ew=24;
 UInt8 Er=1;
 UInt16 predictor_table_length=256;
-UInt8 state_threshold=2;
-UInt8 state_max=3;
+UInt8 state_max=7;
+UInt8 state_threshold = (state_max+1)/2;
 UInt8 SRAM_ways=4;
 UInt32 number_of_sets = 8192;
 UInt32 sampler_fraction = 32;
@@ -87,8 +87,8 @@ static UInt8 asl2_flag = 0;
 
 static UInt16 lru_miss_counter = 0;
 
-static UInt16 totalCacheMissCounter = 0;
-static UInt16 totalCacheMissCounter_saturation = 131071;
+static UInt64 totalCacheMissCounter = 0;
+static UInt64 totalCacheMissCounter_saturation = 4096;
 
 
 static UInt64 readToWriteTransitionsAtInterval = 0;
@@ -152,12 +152,16 @@ CacheSetPHC::CacheSetPHC(
       access_counter[i] = 0;
    }
 
-   if(dcnt_initialization==0)    //Used to initiaize dcnt array to 128 only once. This is a global array, not for a particular set 
+   if(dcnt_initialization==0)    //Used to initiaize dcnt array to 128 only once. This is a global array, not for a particular set. Also m_state is initialised once
    {
       for(UInt32 i = 0; i<256; i++)
       {
          m_dcnt[i] = 128;
+         m_state[i] = state_max/2;
+         m_state_plus[i] = state_max/2;
+         m_state_minus[i] = state_max/2;
       }
+
       dcnt_initialization = 1;
    }
 
@@ -209,179 +213,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    {
 
 
-
-
-
-
-
-      /*
-
-
-   	//sorting the c array
-      int swap;
-      for (int cc = 0 ; cc < (Clength-1); cc++)
-      {
-         for (int d = 0 ; d < (Clength-cc-1); d++)
-         {
-            if (C[d] > C[d+1])   // For decreasing order use < 
-            {
-               swap = C[d];
-               C[d] = C[d+1];
-               C[d+1] = swap;
-            }
-         }
-      }
-
-      //the c array is sorted at this point
-      for(int j=1; j<Clength; j++)           //why starting from j=1?? If we get threshold match at K=0, we cant put CminusK as C[-1]
-      {
-         if(C[0]>K)                          //all members of c are greater than K
-         {
-            CminusK = K;
-            break;
-         }
-         else                                //some members are less than K. Find the max among them
-         {
-            if(C[j]>=K)
-            {
-               CminusK = C[j-1];
-               break;
-            }
-         }
-         CminusK = C[j];
-      }
-         
-      for(int j=(Clength-2); j>=0; j--)      //why starting from Clength-2. Suppose Clength = 5. If we find a match at array index 4 (i.e. first element from back), we cant put CplusK as C[5]
-      {
-         if(C[Clength-1]<K)                  //all members are smaller than K
-         {
-            CplusK = K;
-            break;
-         }
-         else                                //some members are bigger than K. Find the min among them
-         {
-            if(C[j]<=K)
-            {
-               CplusK = C[j+1];
-               break;
-            }
-         }
-         CplusK = C[j];     
-      }
-
-
-      for (int cc = 0 ; cc < (Cpluslength-1); cc++)
-      {
-         for (int d = 0 ; d < (Cpluslength-cc-1); d++)
-         {
-            if (Cplus[d] > Cplus[d+1]) // For decreasing order use < 
-            {
-               swap = Cplus[d];
-               Cplus[d] = Cplus[d+1];
-               Cplus[d+1] = swap;
-            }
-         }
-      }
-
-      ////////////////////////////////////////////////////////////////////////////////////
-
-      for(int j=1; j<Cpluslength; j++)             //why starting from j=1?? If weger threshold match at K=0, we cant put CminusK  //as C[-1]
-      {
-         if(Cplus[0]>Kplus)                        //all members are greater than K
-         {
-            CminusKplus = Kplus;
-            break;
-         }
-         else                                      //some members are less than K. Find the max among them
-         {
-            if(Cplus[j]>=Kplus)
-            {
-               CminusKplus = Cplus[j-1];
-               break;
-            }
-         }
-         CminusKplus = Cplus[j];
-      }
-         
-      for(int j=(Cpluslength-2); j>=0; j--)        //why starting from Clength-2. Suppose Clength = 5. If we find a match at  //array index 4 (i.e. first element from back), we cant put CplusK as C[5]
-      {
-         if(Cplus[Cpluslength-1]<Kplus)            //all members are smaller than K
-         {
-            CplusKplus = Kplus;
-            break;
-         }
-         else                                      //some members are bigger than K. Find the min among them
-         {
-            if(Cplus[j]<=Kplus)
-            {
-               CplusKplus = Cplus[j+1];
-               break;
-            }
-         }
-         CplusKplus = Cplus[j];
-           
-      }
-
-      ////////////////////////////////////////////////////////////////////////////////////
-
-      for (int cc = 0 ; cc < (Cminuslength-1); cc++)
-      {
-         for (int d = 0 ; d < (Cminuslength-cc-1); d++)
-         {
-            if (Cminus[d] > Cminus[d+1])  // For decreasing order use < 
-            {
-               swap = Cminus[d];
-               Cminus[d] = Cminus[d+1];
-               Cminus[d+1] = swap;
-            }
-         }
-      }
-
-      /////////////////////////////////////////////////////////////////////////////////
-
-      for(int j=1; j<Cminuslength; j++)             //why starting from j=1?? If weger threshold match at K=0, we cant put CminusK  //as C[-1]
-      {
-         if(Cminus[0]>Kminus)                        //all members are greater than K
-         {
-            CminusKminus = Kminus;
-            break;
-         }
-         else                                      //some members are less than K. Find the max among them
-         {
-            if(Cminus[j]>=Kminus)
-            {
-               CminusKminus = Cminus[j-1];
-               break;
-            }
-         }
-         CminusKminus = Cminus[j];
-      }
-         
-      for(int j=(Cminuslength-2); j>=0; j--)        //why starting from Clength-2. Suppose Clength = 5. If we find a match at  //array index 4 (i.e. first element from back), we cant put CplusK as C[5]
-      {
-         if(Cminus[Cminuslength-1]<Kminus)            //all members are smaller than K
-         {
-            CplusKminus = Kminus;
-            break;
-         }
-         else                                      //some members are bigger than K. Find the min among them
-         {
-            if(Cminus[j]<=Kminus)
-            {
-               CplusKminus = Cminus[j+1];
-               break;
-            }
-         }
-         CplusKminus = Cminus[j];
-           
-      }
-      
-      */
-
-
-
-
-
       ///////////////////////////////////////////////////////
 
       //finding out CminusK
@@ -425,22 +256,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          CplusKplus = Kplus;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       /////////////////////////////////////////////////////////////////////////////////
 
 
@@ -477,9 +292,9 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       Cminusmax = 128;
       Cminusmin = 128;
       
-      Clength = 0;
-      Cpluslength = 0;
-      Cminuslength = 0;
+      //Clength = 0;
+      //Cpluslength = 0;
+      //Cminuslength = 0;
 
       for (int j=0; j<4096; j++)
       {
@@ -703,8 +518,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          else if((m_cost[index]<Kplus) && (m_state_plus[m_TI[index]]>0))
             m_state_plus[m_TI[index]]--;
 
-         Cplus[Cpluslength]=m_cost[index];
-         Cpluslength++;
+         //Cplus[Cpluslength]=m_cost[index];
+         //Cpluslength++;
 
          //Calculating Cplusmax and Cplusmin
          if(m_cost[index]<Cplusmin)
@@ -856,8 +671,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          else if((m_cost[index]<Kminus) && (m_state_minus[m_TI[index]]>0))
             m_state_minus[m_TI[index]]--;
 
-         Cminus[Cminuslength]=m_cost[index];
-         Cminuslength++;
+         //Cminus[Cminuslength]=m_cost[index];
+         //Cminuslength++;
 
          //Calculating Cminusmax and Cminusmin
          if(m_cost[index]<Cminusmin)
@@ -1028,8 +843,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
 
 
-         C[Clength]=m_cost[index];
-         Clength++;
+         //C[Clength]=m_cost[index];
+         //Clength++;
 
          //Calculating Cmax and Cmin
          //printf("m_cost[index] is %d and Cmin is %d\n", m_cost[index], Cmin);
@@ -1206,8 +1021,8 @@ CacheSetPHC::migrate(UInt32 sram_index)
    UInt16 temp_access_counter = 0;
    UInt8 temp_deadblock = 0;
 	
-	if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)     //PC based deadblock prediction
-   //if(m_deadblock[sram_index]!=0)                 //Newton's deadblock prediction
+	if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)          //PC based deadblock prediction
+   //if(m_deadblock[sram_index]!=0)                     //Newton's deadblock prediction (daaip)
    {
       //find stt_index
       for (UInt32 i = SRAM_ways; i < m_associativity; i++)
