@@ -39,7 +39,7 @@ extern UInt8 migrate_flag;
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
  */
 //#define WAYS_TO_SRAM    4
-#define WAYS_TO_SRAM    16
+#define WAYS_TO_SRAM    4
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -278,6 +278,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "qbs-query-latency", &stats.qbs_query_latency);
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
    registerStatsMetric(name, core_id, "prefetches", &stats.prefetches);
+  
    for(CacheState::cstate_t state = CacheState::CSTATE_FIRST; state < CacheState::NUM_CSTATE_STATES; state = CacheState::cstate_t(int(state)+1)) {
       registerStatsMetric(name, core_id, String("loads-")+CStateString(state), &stats.loads_state[state]);
       registerStatsMetric(name, core_id, String("stores-")+CStateString(state), &stats.stores_state[state]);
@@ -806,16 +807,18 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
 ////////////////////////////////// Added by Newton/////////////////////////////////////////
 void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* master)
 {
+    
     UInt32 blockIndex = master->m_cache->getBlockIndex(address);
 
     //if index is 0,1,2,3 it is SRAM block, else STTRAM block
-    if (blockIndex <= (WAYS_TO_SRAM - 1))
+    if (blockIndex < (WAYS_TO_SRAM)) //SRAM
     {
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
                                             ShmemPerfModel::_USER_THREAD);
     }
-    else if (blockIndex > (WAYS_TO_SRAM - 1))
+    else if (blockIndex >= (WAYS_TO_SRAM))   //STTRAM
+    //else if (blockIndex >=0)   //STTRAM
     {
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
@@ -1654,6 +1657,7 @@ MYLOG("insertCacheBlock l%d local done", m_mem_component);
                    /* To count number of writebacks from L2 cache to L3/LLC in a
                     * writeback cache */
                    g_NumberL2WritebacksToL3++;
+                   
                    /* Address is the address of the block which was newly inserted in L2
                     * and resulted in eviction of dirty block with address evict_address
                     * from L2 and subsequent writeback in L3. Since, evict_address will

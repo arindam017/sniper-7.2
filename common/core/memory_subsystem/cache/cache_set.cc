@@ -53,10 +53,7 @@ CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 byt
 
 
    if (update_replacement)
-   {
-      //printf("updateReplacementIndex called for read hit \n"); //n
       updateReplacementIndex(line_index, 0, set_index);
-   }
 }
 
 void
@@ -71,10 +68,7 @@ CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 byt
 
 
    if (update_replacement)
-   {
-      //printf("updateReplacementIndex called for write hit \n"); //n
       updateReplacementIndex(line_index, 1, set_index);
-   }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -161,7 +155,6 @@ CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evicti
    // This replacement strategy does not take into account the fact that
    // cache blocks can be voluntarily flushed or invalidated due to another write request
    const UInt32 index = getReplacementIndex(cntlr, 0, 0);
-   printf("line 162\n");
    assert(index < m_associativity);
 
    assert(eviction != NULL);
@@ -315,7 +308,7 @@ CacheSet::getBlockIndexForGivenTag(IntPtr tagToFind)  //sn copied from anushree
 {
     SInt32 blockIndex = -1;
     IntPtr tagInSet;
-    
+
     for (SInt32 index = m_associativity - 1; index >= 0; index--)
     {
         tagInSet = m_cache_block_info_array[index]->getTag();

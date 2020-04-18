@@ -223,10 +223,11 @@ Cache::getSetIndex(IntPtr addr)
 {
     IntPtr tag;
     UInt32 set_index;
-    UInt32 blockIndex;
+   
 
     splitAddress(addr, tag, set_index);
 
+    
     return set_index;
 }
 
