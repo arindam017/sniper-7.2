@@ -117,7 +117,7 @@ CacheSetPLRU::updateReplacementIndex(UInt32 accessed_index,  UInt8 write_flag, U
 //////////////////////////////////////////////////////////////////////////////////////////////
 //created by arindam to pass writeback information to policy files (required in phc)
 void
-CacheSetPLRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
+CacheSetPLRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, IntPtr eip)
 {
 
 }

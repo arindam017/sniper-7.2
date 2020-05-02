@@ -65,7 +65,7 @@ CacheSetNMRU::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UI
 //////////////////////////////////////////////////////////////////////////////////////////////
 //created by arindam to pass writeback information to policy files (required in phc)
 void
-CacheSetNMRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
+CacheSetNMRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, IntPtr eip)
 {
 
 }

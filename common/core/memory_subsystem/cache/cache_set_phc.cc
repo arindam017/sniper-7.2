@@ -779,6 +779,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
+            migrate_during_write(index, eip_truncated);  //migrates write index blocks from stt to sram during write
          }
          else //TI is hot
          {
@@ -925,6 +926,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
+            migrate_during_write(index, eip_truncated);  //migrates write index blocks from stt to sram during write
          }
          else //TI is hot
          {
@@ -1089,6 +1091,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
+            migrate_during_write(index, eip_truncated);  //migrates write index blocks from stt to sram during write
          }
    
          else  //TI is hot. select victim from SRAM
@@ -1226,9 +1229,10 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
 //////////////////////////////////////////////////////////////////////////////////////////////
 //created by arindam to pass writeback information to policy files (required in phc)
 void
-CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
+CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, IntPtr eip)
 {
-   
+   UInt16 eip_truncated = truncatedEipCalculation(eip);
+
    if(asl2_flag==0)
    {
       printf("\naccessSingleLine2 is called\n");
@@ -1245,17 +1249,27 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index)
       if(m_wcnt[m_TI[accessed_index]] != 255)
          m_wcnt[m_TI[accessed_index]]++;  //decrement write burst counter on eviction
 
-      //[ARINDAM]
-      //call migrate2() function
-      //if the write hit is in STTRAM and the block is write burst, we need to place the block in SRAM
-      //migrate2() function will do that
+      
+      
       if((accessed_index>=SRAM_ways) && (accessed_index<m_associativity))
       {
+         //TO-DO: modify updateReplacementIndex2 to include eip_truncated
+         migrate_during_write(accessed_index, eip_truncated);  //migrates write index blocks from stt to sram during write. Written by ARINDAM
+
+         /*
+         //[ARINDAM]
+         //call migrate2() function
+         //if the write hit is in STTRAM and the block is write burst, we need to place the block in SRAM
+         //migrate2() function will do that
          if(m_wcnt[m_TI[accessed_index]]>W)
          {
             migrate2(accessed_index);
          }
+         */
       }
+      
+
+      
 
       access_counter[accessed_index]++;
 
@@ -1312,7 +1326,7 @@ CacheSetPHC::truncatedEipCalculation(IntPtr a)  //hashing
 
 
 void
-CacheSetPHC::migrate(UInt32 sram_index)
+CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
 {
 	UInt32 stt_index = -1;
 	UInt8 local_max_bits = 0;
@@ -1386,7 +1400,7 @@ CacheSetPHC::migrate(UInt32 sram_index)
 void
 CacheSetPHC::migrate2(UInt32 stt_index) //this function swaps a write burst file which is write hit in STTRAM with another block from SRAM
 {
-   //sttram_index is the index of the write burst block which is write hit ins STTRAM
+   //sttram_index is the index of the write burst block which is write hit in STTRAM
    //How do we select a block from SRAM with which to swap??
    //We can select a block with lowest m_cost to figure out the most read intense block from SRAM partition
    UInt32 least_cost=255;
@@ -1445,6 +1459,74 @@ CacheSetPHC::migrate2(UInt32 stt_index) //this function swaps a write burst file
    }
 
 
+}
+
+void
+CacheSetPHC::migrate_during_write(UInt32 stt_index, UInt16 eip_truncated)    //called during both core-write and writeback. written by ARINDAM
+//Motive: If a block to be written is found out to be write intensive, then migrate the block to SRAM
+//A block is deadblock if m_dcnt of eip_truncated is less than threshold
+//A block is read intensive if state of eip_truncated is less than threshold and it is not a deadblock
+//A block is write intensive if it is neither deablock nor  
+//QUESTION: How to select the victim block from SRAM??
+{
+   if((m_dcnt[eip_truncated]<dcnt_threshold) && (m_state[eip_truncated]>=state_threshold))   //not dead and write intense
+   {
+      UInt32 least_cost=255;
+      UInt32 sram_index=-1;
+
+      CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
+
+      UInt8 temp_lru_bits = 0;
+      UInt16 temp_TI = 0;
+      UInt8 temp_cost = 0;
+      UInt16 temp_write_array = 0;
+      UInt16 temp_read_array = 0;
+      UInt16 temp_access_counter = 0;
+      UInt8 temp_deadblock = 0;
+
+
+      for (UInt32 i=0; i<SRAM_ways; i++)
+      {
+         if ((m_cost[i]<least_cost) && isValidReplacement(i))
+         {
+            least_cost=m_cost[i];
+            sram_index = i;
+         }
+      }
+
+      if ((sram_index>=0) && (sram_index<SRAM_ways))
+      {
+
+         temp_cache_block_info->clone(m_cache_block_info_array[stt_index]);
+         m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[sram_index]);
+         m_cache_block_info_array[sram_index]->clone(temp_cache_block_info);
+
+         temp_lru_bits = m_lru_bits[sram_index];
+         temp_TI = m_TI[sram_index]; 
+         temp_cost = m_cost[sram_index]; 
+         temp_write_array = write_array[sram_index];
+         temp_read_array = read_array[sram_index];
+         temp_access_counter = access_counter[sram_index];
+         temp_deadblock = m_deadblock[sram_index];
+
+         m_lru_bits[sram_index] = m_lru_bits[stt_index];
+         m_TI[sram_index] = m_TI[stt_index]; 
+         m_cost[sram_index] = m_cost[stt_index]; 
+         write_array[sram_index] = write_array[stt_index];
+         read_array[sram_index] = read_array[stt_index];
+         access_counter[sram_index] = access_counter[stt_index];
+         m_deadblock[sram_index] = m_deadblock[stt_index];
+
+         m_lru_bits[stt_index] = temp_lru_bits;
+         m_TI[stt_index] = temp_TI; 
+         m_cost[stt_index] = temp_cost; 
+         write_array[stt_index] = temp_write_array;
+         read_array[stt_index] = temp_read_array;
+         access_counter[stt_index] = temp_access_counter;
+         m_deadblock[stt_index] = temp_deadblock;
+      }
+   }
+   
 }
 
 

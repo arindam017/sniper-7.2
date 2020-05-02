@@ -56,7 +56,7 @@ class Cache : public CacheBase
       CacheBlockInfo* accessSingleLine(IntPtr addr,
             access_t access_type, Byte* buff, UInt32 bytes, SubsecondTime now, bool update_replacement);
 
-      void accessSingleLine2(IntPtr addr);      //created by arindam to pass writeback information to policy files (required in phc)
+      void accessSingleLine2(IntPtr addr, IntPtr eip);      //created by arindam to pass writeback information to policy files (required in phc)
 
       void insertSingleLine(IntPtr addr, Byte* fill_buff,
             bool* eviction, IntPtr* evict_addr,

@@ -124,7 +124,7 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
 ////////////////////////////////////////////////////////////////////////////////////
 //created by arindam to pass writeback information to policy files (required in phc)
 void
-Cache::accessSingleLine2(IntPtr addr)
+Cache::accessSingleLine2(IntPtr addr, IntPtr eip)
 {
    IntPtr tag;
    UInt32 set_index;
@@ -133,7 +133,7 @@ Cache::accessSingleLine2(IntPtr addr)
    splitAddress(addr, tag, set_index);
    CacheSet* set = m_sets[set_index];
    CacheBlockInfo* cache_block_info = set->find(tag, &line_index);
-   set->write_line2(line_index, set_index);
+   set->write_line2(line_index, set_index, eip);
 }
 /////////////////////////////////////////////////////////////////////////////////////
 

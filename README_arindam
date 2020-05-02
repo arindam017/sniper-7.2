@@ -1,0 +1,57 @@
+How to change the range of m_state??
+
+1. Initialize state_max to something (odd)
+2. Initialize m_state, m_state_plus and m_state_minus arrays to state_max/2 (near line 157)
+
+
+Phase length 4k with state_max = 7 is giving best results
+
+
+How to change from dcnt to daaip based deadblock prediction??
+
+1. change in migrate() function (near line 1025)
+
+
+For changing cache size:
+
+1.gainestown_10 = 8MB sttram llc, with phc
+2.gainestown_11 = 4MB sttram llc, with phc
+3.gainestown_12 = 16MB sttram llc, with phc
+4.gainestown_13 = 4MB lru sttram llc
+5.gainestown_14 = 8MB lru sttram llc
+6.gainestown_15 = 16MB lru sttram llc
+7.gainestown_1 = 2MB lru sttam llc
+
+How to change from Hybrid to STTRAM?
+
+1. In cache_cntlr.cc change #define WAYS_TO_SRAM to 0
+2. In phc.cc, change SRAM_ways to 0
+
+
+How to change to Hybrid?
+
+1. In cache_cntlr.cc change #define WAYS_TO_SRAM to 4
+2. In phc.cc, change SRAM_ways to 4
+
+
+Hoe to change to SRAM?
+
+1. In cache_cntlr.cc change #define WAYS_TO_SRAM to 16
+2. In phc.cc, change SRAM_ways to 16
+
+
+While comparing lru and phc, only the following benchmarks (13) show variation:
+bzip cactusADM GemsFDTD gromacs hmmer lbm leslie libq mcf omnetpp soplex sphinx zeusmp
+
+While comparing different variations of phc, following benchmarks (10) show variation:
+cactusADM GemsFDTD lbm leslie libq mcf omnetpp soplex sphinx zeusmp
+
+
+if(m_wcnt[m_TI[index]] != 0)
+            m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
+
+migrate: during eviction from sram, if the evicted block is live, preserve it in sttram. Used 5 times. (getReplacementIndex: set index=1,2,3,4 and nonsampler sets)
+
+migrate2: during core-write(writeback) to sttram, if the block is write burst, swap it with a block from sram. Uses write burst predictor 
+
+migrate_during_write: during write (both core-write and demand write) to sttram, if the block is found to be write intense, swap it with ablock from SRAM. Uses read-write intensity predictor of baseline phc. Used 4 times (getReplacementIndex: set index=3,4,nonsampler sets; updateReplacementIndex2)
