@@ -98,6 +98,9 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   if 'interval_timer.Write_To_Read_Transitions_At_Eviction' in results:
     results['interval_timer.Write_To_Read_Transitions_At_Eviction'] = [float(results['interval_timer.Write_To_Read_Transitions_At_Eviction'][core] or 1) for core in range(ncores)]
 
+  if 'interval_timer.Read_To_Write_Transitions_At_Eviction' in results:
+    results['interval_timer.Read_To_Write_Transitions_At_Eviction'] = [float(results['interval_timer.Read_To_Write_Transitions_At_Eviction'][core] or 1) for core in range(ncores)]
+
   if 'interval_timer.Read_Intense_Block_Counter' in results:
     results['interval_timer.Read_Intense_Block_Counter'] = [float(results['interval_timer.Read_Intense_Block_Counter'][core] or 1) for core in range(ncores)]
 
@@ -106,6 +109,205 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
 
   if 'interval_timer.Deadblock_Counter' in results:
     results['interval_timer.Deadblock_Counter'] = [float(results['interval_timer.Deadblock_Counter'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.Valid_Block_Evicted' in results:
+    results['interval_timer.Valid_Block_Evicted'] = [float(results['interval_timer.Valid_Block_Evicted'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.Write_Intense_Blocks_During_Migrate' in results:
+    results['interval_timer.Write_Intense_Blocks_During_Migrate'] = [float(results['interval_timer.Write_Intense_Blocks_During_Migrate'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.Read_Intense_Blocks_During_Migrate' in results:
+    results['interval_timer.Read_Intense_Blocks_During_Migrate'] = [float(results['interval_timer.Read_Intense_Blocks_During_Migrate'][core] or 1) for core in range(ncores)] 
+
+
+
+
+  if 'interval_timer.Read_Intense_Blocks_M' in results:
+    results['interval_timer.Read_Intense_Blocks_M'] = [float(results['interval_timer.Read_Intense_Blocks_M'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Write_Intense_Blocks_M' in results:
+    results['interval_timer.Write_Intense_Blocks_M'] = [float(results['interval_timer.Write_Intense_Blocks_M'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Read_Intense_Blocks_MDuringMigrate' in results:
+    results['interval_timer.Read_Intense_Blocks_MDuringMigrate'] = [float(results['interval_timer.Read_Intense_Blocks_MDuringMigrate'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Write_Intense_Blocks_MDuringMigrate' in results:
+    results['interval_timer.Write_Intense_Blocks_MDuringMigrate'] = [float(results['interval_timer.Write_Intense_Blocks_MDuringMigrate'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Read_Before_MA' in results:
+    results['interval_timer.Blocks_Read_Before_MA'] = [float(results['interval_timer.Blocks_Read_Before_MA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MB' in results:
+    results['interval_timer.Blocks_Read_Before_MB'] = [float(results['interval_timer.Blocks_Read_Before_MB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MC' in results:
+    results['interval_timer.Blocks_Read_Before_MC'] = [float(results['interval_timer.Blocks_Read_Before_MC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MD' in results:
+    results['interval_timer.Blocks_Read_Before_MD'] = [float(results['interval_timer.Blocks_Read_Before_MD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_ME' in results:
+    results['interval_timer.Blocks_Read_Before_ME'] = [float(results['interval_timer.Blocks_Read_Before_ME'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Read_Before_MDuringWriteA' in results:
+    results['interval_timer.Blocks_Read_Before_MDuringWriteA'] = [float(results['interval_timer.Blocks_Read_Before_MDuringWriteA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MDuringWriteB' in results:
+    results['interval_timer.Blocks_Read_Before_MDuringWriteB'] = [float(results['interval_timer.Blocks_Read_Before_MDuringWriteB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MDuringWriteC' in results:
+    results['interval_timer.Blocks_Read_Before_MDuringWriteC'] = [float(results['interval_timer.Blocks_Read_Before_MDuringWriteC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MDuringWriteD' in results:
+    results['interval_timer.Blocks_Read_Before_MDuringWriteD'] = [float(results['interval_timer.Blocks_Read_Before_MDuringWriteD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_Before_MDuringWriteE' in results:
+    results['interval_timer.Blocks_Read_Before_MDuringWriteE'] = [float(results['interval_timer.Blocks_Read_Before_MDuringWriteE'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Write_Before_MA' in results:
+    results['interval_timer.Blocks_Write_Before_MA'] = [float(results['interval_timer.Blocks_Write_Before_MA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MB' in results:
+    results['interval_timer.Blocks_Write_Before_MB'] = [float(results['interval_timer.Blocks_Write_Before_MB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MC' in results:
+    results['interval_timer.Blocks_Write_Before_MC'] = [float(results['interval_timer.Blocks_Write_Before_MC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MD' in results:
+    results['interval_timer.Blocks_Write_Before_MD'] = [float(results['interval_timer.Blocks_Write_Before_MD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_ME' in results:
+    results['interval_timer.Blocks_Write_Before_ME'] = [float(results['interval_timer.Blocks_Write_Before_ME'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Write_Before_MDuringWriteA' in results:
+    results['interval_timer.Blocks_Write_Before_MDuringWriteA'] = [float(results['interval_timer.Blocks_Write_Before_MDuringWriteA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MDuringWriteB' in results:
+    results['interval_timer.Blocks_Write_Before_MDuringWriteB'] = [float(results['interval_timer.Blocks_Write_Before_MDuringWriteB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MDuringWriteC' in results:
+    results['interval_timer.Blocks_Write_Before_MDuringWriteC'] = [float(results['interval_timer.Blocks_Write_Before_MDuringWriteC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MDuringWriteD' in results:
+    results['interval_timer.Blocks_Write_Before_MDuringWriteD'] = [float(results['interval_timer.Blocks_Write_Before_MDuringWriteD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_Before_MDuringWriteE' in results:
+    results['interval_timer.Blocks_Write_Before_MDuringWriteE'] = [float(results['interval_timer.Blocks_Write_Before_MDuringWriteE'][core] or 1) for core in range(ncores)] 
+
+
+
+
+
+  if 'interval_timer.Blocks_Read_After_MA' in results:
+    results['interval_timer.Blocks_Read_After_MA'] = [float(results['interval_timer.Blocks_Read_After_MA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MB' in results:
+    results['interval_timer.Blocks_Read_After_MB'] = [float(results['interval_timer.Blocks_Read_After_MB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MC' in results:
+    results['interval_timer.Blocks_Read_After_MC'] = [float(results['interval_timer.Blocks_Read_After_MC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MD' in results:
+    results['interval_timer.Blocks_Read_After_MD'] = [float(results['interval_timer.Blocks_Read_After_MD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_ME' in results:
+    results['interval_timer.Blocks_Read_After_ME'] = [float(results['interval_timer.Blocks_Read_After_ME'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Read_After_MDuringWriteA' in results:
+    results['interval_timer.Blocks_Read_After_MDuringWriteA'] = [float(results['interval_timer.Blocks_Read_After_MDuringWriteA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MDuringWriteB' in results:
+    results['interval_timer.Blocks_Read_After_MDuringWriteB'] = [float(results['interval_timer.Blocks_Read_After_MDuringWriteB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MDuringWriteC' in results:
+    results['interval_timer.Blocks_Read_After_MDuringWriteC'] = [float(results['interval_timer.Blocks_Read_After_MDuringWriteC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MDuringWriteD' in results:
+    results['interval_timer.Blocks_Read_After_MDuringWriteD'] = [float(results['interval_timer.Blocks_Read_After_MDuringWriteD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Read_After_MDuringWriteE' in results:
+    results['interval_timer.Blocks_Read_After_MDuringWriteE'] = [float(results['interval_timer.Blocks_Read_After_MDuringWriteE'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Write_After_MA' in results:
+    results['interval_timer.Blocks_Write_After_MA'] = [float(results['interval_timer.Blocks_Write_After_MA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MB' in results:
+    results['interval_timer.Blocks_Write_After_MB'] = [float(results['interval_timer.Blocks_Write_After_MB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MC' in results:
+    results['interval_timer.Blocks_Write_After_MC'] = [float(results['interval_timer.Blocks_Write_After_MC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MD' in results:
+    results['interval_timer.Blocks_Write_After_MD'] = [float(results['interval_timer.Blocks_Write_After_MD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_ME' in results:
+    results['interval_timer.Blocks_Write_After_ME'] = [float(results['interval_timer.Blocks_Write_After_ME'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.Blocks_Write_After_MDuringWriteA' in results:
+    results['interval_timer.Blocks_Write_After_MDuringWriteA'] = [float(results['interval_timer.Blocks_Write_After_MDuringWriteA'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MDuringWriteB' in results:
+    results['interval_timer.Blocks_Write_After_MDuringWriteB'] = [float(results['interval_timer.Blocks_Write_After_MDuringWriteB'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MDuringWriteC' in results:
+    results['interval_timer.Blocks_Write_After_MDuringWriteC'] = [float(results['interval_timer.Blocks_Write_After_MDuringWriteC'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MDuringWriteD' in results:
+    results['interval_timer.Blocks_Write_After_MDuringWriteD'] = [float(results['interval_timer.Blocks_Write_After_MDuringWriteD'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Blocks_Write_After_MDuringWriteE' in results:
+    results['interval_timer.Blocks_Write_After_MDuringWriteE'] = [float(results['interval_timer.Blocks_Write_After_MDuringWriteE'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.M_Count' in results:
+    results['interval_timer.M_Count'] = [float(results['interval_timer.M_Count'][core] or 1) for core in range(ncores)] 
+
+  if 'interval_timer.Migrate_During_Write_Count' in results:
+    results['interval_timer.Migrate_During_Write_Count'] = [float(results['interval_timer.Migrate_During_Write_Count'][core] or 1) for core in range(ncores)] 
+
+
+
+  if 'interval_timer.SRAM_Read_Before_Migration'    in results: 
+    results['interval_timer.SRAM_Read_Before_Migration']  = [float(results['interval_timer.SRAM_Read_Before_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.SRAM_Read_After_Migration'     in results: 
+    results['interval_timer.SRAM_Read_After_Migration']   = [float(results['interval_timer.SRAM_Read_After_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.SRAM_Write_Before_Migration'   in results: 
+    results['interval_timer.SRAM_Write_Before_Migration']   = [float(results['interval_timer.SRAM_Write_Before_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.SRAM_Write_After_Migration'    in results: 
+    results['interval_timer.SRAM_Write_After_Migration']  = [float(results['interval_timer.SRAM_Write_After_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.STTRAM_Read_Before_Migration'  in results: 
+    results['interval_timer.STTRAM_Read_Before_Migration']  = [float(results['interval_timer.STTRAM_Read_Before_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.STTRAM_Read_After_Migration'   in results: 
+    results['interval_timer.STTRAM_Read_After_Migration']   = [float(results['interval_timer.STTRAM_Read_After_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.STTRAM_Write_Before_Migration'   in results: 
+    results['interval_timer.STTRAM_Write_Before_Migration'] = [float(results['interval_timer.STTRAM_Write_Before_Migration'][core] or 1) for core in range(ncores)]  
+  
+  if 'interval_timer.STTRAM_Write_After_Migration'  in results: 
+    results['interval_timer.STTRAM_Write_After_Migration']  = [float(results['interval_timer.STTRAM_Write_After_Migration'][core] or 1) for core in range(ncores)]  
+
+
+
   
 
 
@@ -133,10 +335,72 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     #('  Read to Write Transition Count at an Eviction',     'interval_timer.Read_To_Write_Transitions_At_Eviction', format_int),
     #('  Write to Read Transition Count at an Interval',     'interval_timer.Write_To_Read_Transitions_At_Interval', format_int),
     ('  Write to Read Transition Count at an Eviction',     'interval_timer.Write_To_Read_Transitions_At_Eviction', format_int),
+    ('  Read to Write Transition Count at an Eviction',     'interval_timer.Read_To_Write_Transitions_At_Eviction', format_int),
 
-    ('  Read Intense Block Counter',     'interval_timer.Read_Intense_Block_Counter', format_int),
-    ('  Write Intense Block Counter',     'interval_timer.Write_Intense_Block_Counter', format_int),
-    ('  Deadblock Counter',     'interval_timer.Deadblock_Counter', format_int),
+    ('  Read Intense Block Counter',            'interval_timer.Read_Intense_Block_Counter',               format_int),
+    ('  Write Intense Block Counter',           'interval_timer.Write_Intense_Block_Counter',              format_int),
+    ('  Deadblock Counter',                     'interval_timer.Deadblock_Counter',                        format_int),
+    ('  Valid Blocks Evicted',                  'interval_timer.Valid_Block_Evicted',                      format_int),
+    #('  Write Intense Blocks During Migrate',   'interval_timer.Write_Intense_Blocks_During_Migrate',      format_int),
+    #('  Read Intense Blocks During Migrate',    'interval_timer.Read_Intense_Blocks_During_Migrate',       format_int),
+
+    ('  Read Intense Blocks M',                'interval_timer.Read_Intense_Blocks_M',                   format_int),
+    ('  Write Intense Blocks M',               'interval_timer.Write_Intense_Blocks_M',                  format_int),
+    ('  Read Intense Blocks MDuringMigrate',    'interval_timer.Read_Intense_Blocks_MDuringMigrate',       format_int),
+    ('  Write Intense Blocks MDuringMigrate',   'interval_timer.Write_Intense_Blocks_MDuringMigrate',      format_int),
+    ('  Blocks Read Before MA',              'interval_timer.Blocks_Read_Before_MA',                 format_int),
+    ('  Blocks Read Before MB',             'interval_timer.Blocks_Read_Before_MB',                format_int),
+    ('  Blocks Read Before MC',             'interval_timer.Blocks_Read_Before_MC',                format_int),
+    ('  Blocks Read Before MD',             'interval_timer.Blocks_Read_Before_MD',                format_int),
+    ('  Blocks Read Before ME',            'interval_timer.Blocks_Read_Before_ME',               format_int),
+    ('  Blocks Read Before MDuringWriteA',    'interval_timer.Blocks_Read_Before_MDuringWriteA',       format_int),
+    ('  Blocks Read Before MDuringWriteB',   'interval_timer.Blocks_Read_Before_MDuringWriteB',      format_int),
+    ('  Blocks Read Before MDuringWriteC',   'interval_timer.Blocks_Read_Before_MDuringWriteC',      format_int),
+    ('  Blocks Read Before MDuringWriteD',   'interval_timer.Blocks_Read_Before_MDuringWriteD',      format_int),
+    ('  Blocks Read Before MDuringWriteE',  'interval_timer.Blocks_Read_Before_MDuringWriteE',     format_int),
+    ('  Blocks Write Before MA',             'interval_timer.Blocks_Write_Before_MA',                format_int),
+    ('  Blocks Write Before MB',            'interval_timer.Blocks_Write_Before_MB',               format_int),
+    ('  Blocks Write Before MC',            'interval_timer.Blocks_Write_Before_MC',               format_int),
+    ('  Blocks Write Before MD',            'interval_timer.Blocks_Write_Before_MD',               format_int),
+    ('  Blocks Write Before ME',           'interval_timer.Blocks_Write_Before_ME',              format_int),
+    ('  Blocks Write Before MDuringWriteA',   'interval_timer.Blocks_Write_Before_MDuringWriteA',      format_int),
+    ('  Blocks Write Before MDuringWriteB',  'interval_timer.Blocks_Write_Before_MDuringWriteB',     format_int),
+    ('  Blocks Write Before MDuringWriteC',  'interval_timer.Blocks_Write_Before_MDuringWriteC',     format_int),
+    ('  Blocks Write Before MDuringWriteD',  'interval_timer.Blocks_Write_Before_MDuringWriteD',     format_int),
+    ('  Blocks Write Before MDuringWriteE', 'interval_timer.Blocks_Write_Before_MDuringWriteE',    format_int),
+    ('  Blocks Read After MA',               'interval_timer.Blocks_Read_After_MA',                  format_int),
+    ('  Blocks Read After MB',              'interval_timer.Blocks_Read_After_MB',                 format_int),
+    ('  Blocks Read After MC',              'interval_timer.Blocks_Read_After_MC',                 format_int),
+    ('  Blocks Read After MD',              'interval_timer.Blocks_Read_After_MD',                 format_int),
+    ('  Blocks Read After ME',             'interval_timer.Blocks_Read_After_ME',                format_int),
+    ('  Blocks Read After MDuringWriteA',     'interval_timer.Blocks_Read_After_MDuringWriteA',        format_int),
+    ('  Blocks Read After MDuringWriteB',    'interval_timer.Blocks_Read_After_MDuringWriteB',       format_int),
+    ('  Blocks Read After MDuringWriteC',    'interval_timer.Blocks_Read_After_MDuringWriteC',       format_int),
+    ('  Blocks Read After MDuringWriteD',    'interval_timer.Blocks_Read_After_MDuringWriteD',       format_int),
+    ('  Blocks Read After MDuringWriteE',   'interval_timer.Blocks_Read_After_MDuringWriteE',      format_int),
+    ('  Blocks Write After MA',              'interval_timer.Blocks_Write_After_MA',                 format_int),
+    ('  Blocks Write After MB',             'interval_timer.Blocks_Write_After_MB',                format_int),
+    ('  Blocks Write After MC',             'interval_timer.Blocks_Write_After_MC',                format_int),
+    ('  Blocks Write After MD',             'interval_timer.Blocks_Write_After_MD',                format_int),
+    ('  Blocks Write After ME',            'interval_timer.Blocks_Write_After_ME',               format_int),
+    ('  Blocks Write After MDuringWriteA',    'interval_timer.Blocks_Write_After_MDuringWriteA',       format_int),
+    ('  Blocks Write After MDuringWriteB',   'interval_timer.Blocks_Write_After_MDuringWriteB',      format_int),
+    ('  Blocks Write After MDuringWriteC',   'interval_timer.Blocks_Write_After_MDuringWriteC',      format_int),
+    ('  Blocks Write After MDuringWriteD',   'interval_timer.Blocks_Write_After_MDuringWriteD',      format_int),
+    ('  Blocks Write After MDuringWriteE',  'interval_timer.Blocks_Write_After_MDuringWriteE',     format_int),
+    ('  M Count',                              'interval_timer.M_Count',                                 format_int),
+    ('  Migrate During Write Count',            'interval_timer.Migrate_During_Write_Count',               format_int),
+    
+    ('  SRAM Read Before Migration',            'interval_timer.SRAM_Read_Before_Migration',              format_int),
+    ('  SRAM Read After Migration',             'interval_timer.SRAM_Read_After_Migration',               format_int),
+    ('  SRAM Write Before Migration',           'interval_timer.SRAM_Write_Before_Migration',             format_int),
+    ('  SRAM Write After Migration',            'interval_timer.SRAM_Write_After_Migration',              format_int),
+    ('  STTRAM Read Before Migration',          'interval_timer.STTRAM_Read_Before_Migration',            format_int),
+    ('  STTRAM Read After Migration',           'interval_timer.STTRAM_Read_After_Migration',             format_int),
+    ('  STTRAM Write Before Migration',         'interval_timer.STTRAM_Write_Before_Migration',           format_int),
+    ('  STTRAM Write After Migration',          'interval_timer.STTRAM_Write_After_Migration',            format_int),
+
+
   ]
 
   if 'branch_predictor.num-incorrect' in results:
@@ -191,11 +455,11 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
 
 
 
- # results['L3.NumberOfL3WriteFromDirectory'] = [float(results['L3.NumberOfL3WriteFromDirectory'][c])	//sn anushree
+ # results['L3.NumberOfL3WriteFromDirectory'] = [float(results['L3.NumberOfL3WriteFromDirectory'][c]) //sn anushree
  #   for c in range(ncores)
  # ]
 
- # results['L3.NumberOfL3WriteFromL2'] = [float(results['L3.NumberOfL3WriteFromL2'][c])	//sn anushree
+ # results['L3.NumberOfL3WriteFromL2'] = [float(results['L3.NumberOfL3WriteFromL2'][c]) //sn anushree
  #   for c in range(ncores)
  # ]
 

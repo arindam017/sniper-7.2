@@ -50,6 +50,18 @@ class CacheSetPHC : public CacheSet
       UInt16* read_array;
       UInt16* access_counter;
       UInt8* m_deadblock;
+
+      UInt64* m_read_before_m1;           
+      UInt64* m_write_before_m1;          
+      UInt64* m_read_after_m1;            
+      UInt64* m_write_after_m1;           
+      UInt8* m1_flag;                    
+      UInt64* m_read_before_mduringwrite; 
+      UInt64* m_write_before_mduringwrite;
+      UInt64* m_read_after_mduringwrite;  
+      UInt64* m_write_after_mduringwrite; 
+      UInt8* mduringwrite_flag;          
+
       CacheSetInfoLRU* m_set_info;
       void moveToMRU(UInt32 accessed_index);
       UInt16 truncatedEipCalculation(IntPtr a);

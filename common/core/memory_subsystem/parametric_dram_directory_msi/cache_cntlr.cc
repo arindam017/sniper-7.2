@@ -12,7 +12,7 @@
 
 #include <cstring>
 
-IntPtr eip_global;
+//IntPtr eip_global;
 IntPtr eip_global_2;
 static UInt64 g_NumberOfL3WritesDueToWriteBack; //nss
 //static UInt64 globalWritebacksToL3counter;   //this is a global counter. this counter will be reset when updateReplacementindex for phc in LLC is called 
@@ -33,7 +33,7 @@ static UInt64 g_costSTTRAM;
 
 static UInt64 g_NumberL2WritebacksToL3;
 
-extern UInt8 migrate_flag;
+extern UInt8 extern_migrate_flag;
 
 /* If the flag is true, it indicates that a block from LLC is getting evicted.
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
@@ -1145,7 +1145,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          }
          else
          {
-            eip_global=eip;   //sn global created
+            //eip_global=eip;   //sn global created
             initiateDirectoryAccess(mem_op_type, address, isPrefetch != Prefetch::NONE, t_issue);
          }
       }
@@ -1544,13 +1544,13 @@ CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* 
    
    // Defined by ARINDAM. Accounts for extra penalty when a living block is 
    // evicted from SRAM and is preserved in STTRAM (done in PHC)
-   /*
-   if(migrate_flag==1)
+   
+   if(extern_migrate_flag==1)
    {
-      //getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
-      migrate_flag = 0;
+      getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+      extern_migrate_flag = 0;
    }
-   */
+   
    
    
 
@@ -2128,7 +2128,7 @@ MYLOG("processExRepFromDramDirectory l%d", m_mem_component);
    Byte* data_buf = shmem_msg->getDataBuf();
 
    insertCacheBlock(address, CacheState::EXCLUSIVE, data_buf, requester, ShmemPerfModel::_SIM_THREAD, eip);
-   eip_global=0; //sn reset eip global to 0
+   //eip_global=0; //sn reset eip global to 0
 
 MYLOG("processExRepFromDramDirectory l%d end", m_mem_component);
 }

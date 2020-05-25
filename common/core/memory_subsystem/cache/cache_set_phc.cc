@@ -8,12 +8,12 @@
 
 
 ///////// required for dynamic cost change/////////////
-UInt8 CplusK = 255;						//C+(K0)
-UInt8 CminusK = 0;						//C-(K0)
-UInt8 CplusKplus = 255;					//C+(K+)
-UInt8 CplusKminus = 255;				//C+(K-)
-UInt8 CminusKplus = 0;					//C-(K+)
-UInt8 CminusKminus = 0;					//C-(K-)
+UInt8 CplusK = 255;                 //C+(K0)
+UInt8 CminusK = 0;                  //C-(K0)
+UInt8 CplusKplus = 255;             //C+(K+)
+UInt8 CplusKminus = 255;            //C+(K-)
+UInt8 CminusKplus = 0;              //C-(K+)
+UInt8 CminusKminus = 0;             //C-(K-)
 
 UInt8 Cmax = 128;
 UInt8 Cmin = 128;
@@ -78,7 +78,7 @@ UInt32 number_of_sets = 8192;
 UInt32 sampler_fraction = 32;
 
 extern UInt64 globalWritebacksToL3counter;   //this is a global counter. this counter will be reset when updateReplacementindex for phc in LLC is called 
-UInt8 migrate_flag = 0;
+UInt8 extern_migrate_flag = 0;
 
 static UInt8 m_state[256] = {0};             //state table used by sampler set 3-63
 static UInt8 m_state_plus[256] = {0};        //state table used by sampler set 1
@@ -104,8 +104,80 @@ static UInt64 writeToReadTransitionsAtInterval = 0;
 static UInt64 readToWriteTransitionsAtEviction = 0;
 static UInt64 writeToReadTransitionsAtEviction = 0;
 
+static UInt64 validBlockEvicted = 0;
+
+
+
+
+
+static UInt64 readIntenseBlocksM1                  = 0;
+static UInt64 writeIntenseBlocksM1                 = 0;
+static UInt64 readIntenseBlocksMDuringWrite        = 0;
+static UInt64 writeIntenseBlocksMDuringWrite       = 0;
+
+static UInt64 blocksReadBeforeM1020                = 0;
+static UInt64 blocksReadBeforeM12040               = 0;
+static UInt64 blocksReadBeforeM14060               = 0;
+static UInt64 blocksReadBeforeM16080               = 0;
+static UInt64 blocksReadBeforeM180100              = 0;
+static UInt64 blocksReadAfterM1020                = 0;
+static UInt64 blocksReadAfterM12040               = 0;
+static UInt64 blocksReadAfterM14060               = 0;
+static UInt64 blocksReadAfterM16080               = 0;
+static UInt64 blocksReadAfterM180100              = 0;
+
+static UInt64 blocksReadBeforeMDuringWrite020      = 0;
+static UInt64 blocksReadBeforeMDuringWrite2040     = 0;
+static UInt64 blocksReadBeforeMDuringWrite4060     = 0;
+static UInt64 blocksReadBeforeMDuringWrite6080     = 0;
+static UInt64 blocksReadBeforeMDuringWrite80100    = 0;
+static UInt64 blocksReadAfterMDuringWrite020      = 0;
+static UInt64 blocksReadAfterMDuringWrite2040     = 0;
+static UInt64 blocksReadAfterMDuringWrite4060     = 0;
+static UInt64 blocksReadAfterMDuringWrite6080     = 0;
+static UInt64 blocksReadAfterMDuringWrite80100    = 0;
+
+static UInt64 blocksWriteBeforeM1020               = 0;
+static UInt64 blocksWriteBeforeM12040              = 0;
+static UInt64 blocksWriteBeforeM14060              = 0;
+static UInt64 blocksWriteBeforeM16080              = 0;
+static UInt64 blocksWriteBeforeM180100             = 0;
+static UInt64 blocksWriteAfterM1020               = 0;
+static UInt64 blocksWriteAfterM12040              = 0;
+static UInt64 blocksWriteAfterM14060              = 0;
+static UInt64 blocksWriteAfterM16080              = 0;
+static UInt64 blocksWriteAfterM180100             = 0;
+
+static UInt64 blocksWriteBeforeMDuringWrite020     = 0;
+static UInt64 blocksWriteBeforeMDuringWrite2040    = 0;
+static UInt64 blocksWriteBeforeMDuringWrite4060    = 0;
+static UInt64 blocksWriteBeforeMDuringWrite6080    = 0;
+static UInt64 blocksWriteBeforeMDuringWrite80100   = 0;
+static UInt64 blocksWriteAfterMDuringWrite020     = 0;
+static UInt64 blocksWriteAfterMDuringWrite2040    = 0;
+static UInt64 blocksWriteAfterMDuringWrite4060    = 0;
+static UInt64 blocksWriteAfterMDuringWrite6080    = 0;
+static UInt64 blocksWriteAfterMDuringWrite80100   = 0;
+
+static UInt64 m1Count                              = 0;
+static UInt64 mDuringWriteCount                    = 0;
+
+static UInt64 SRAMReadBeforeMigration              = 0;
+static UInt64 SRAMReadAfterMigration               = 0;
+static UInt64 SRAMWriteBeforeMigration             = 0;
+static UInt64 SRAMWriteAfterMigration              = 0;
+static UInt64 STTRAMReadBeforeMigration            = 0;
+static UInt64 STTRAMReadAfterMigration             = 0;
+static UInt64 STTRAMWriteBeforeMigration           = 0;
+static UInt64 STTRAMWriteAfterMigration            = 0;
+
+
+
+
+
+
 static UInt16 histogram[1000] = {0};
-static UInt8 sf = 4;
+static UInt8 sf = 2;
 
 static UInt8 N_transition = 1; //interval length for wrti, rwti calculation
 
@@ -178,6 +250,35 @@ CacheSetPHC::CacheSetPHC(
    m_deadblock = new UInt8[m_associativity];    //deadblock counter using Newton's method
    for (UInt32 i = 0; i < m_associativity; i++)
       m_deadblock[i] = 0; 
+
+
+
+   m_read_before_m1              = new UInt64[m_associativity];
+   m_write_before_m1             = new UInt64[m_associativity];
+   m_read_after_m1               = new UInt64[m_associativity];
+   m_write_after_m1              = new UInt64[m_associativity];
+   m1_flag                       = new UInt8[m_associativity];
+   m_read_before_mduringwrite    = new UInt64[m_associativity];
+   m_write_before_mduringwrite   = new UInt64[m_associativity];
+   m_read_after_mduringwrite     = new UInt64[m_associativity];
+   m_write_after_mduringwrite    = new UInt64[m_associativity];
+   mduringwrite_flag             = new UInt8[m_associativity];
+
+   for (UInt32 i = 0; i < m_associativity; i++)
+   {
+      m_read_before_m1[i]  = 0;
+      m_write_before_m1[i] = 0;  
+      m_read_after_m1[i]   = 0; 
+      m_write_after_m1[i]  = 0; 
+      m1_flag[i]           = 0;  //If a block has been migrated this is set to 1
+
+      m_read_before_mduringwrite[i]  = 0;
+      m_write_before_mduringwrite[i] = 0;  
+      m_read_after_mduringwrite[i]   = 0; 
+      m_write_after_mduringwrite[i]  = 0; 
+      mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+   }
+
    
 
    ///////////////////////////////////////////////////////
@@ -186,10 +287,78 @@ CacheSetPHC::CacheSetPHC(
       //printf("\n\nInterval length for phase change is %d and interval length for wrti is %d\n", totalCacheMissCounter_saturation, N_transition);
       printf("Associativity is %d, SRAM ways are %d\n\n\n", m_associativity, SRAM_ways);
       g_iteration_count++;
-      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction", &writeToReadTransitionsAtEviction);
-      registerStatsMetric("interval_timer", 0 , "Read_Intense_Block_Counter", &read_intense_block_counter);
-      registerStatsMetric("interval_timer", 0 , "Write_Intense_Block_Counter", &write_intense_block_counter);
-      registerStatsMetric("interval_timer", 0 , "Deadblock_Counter", &deadblock_counter);
+      registerStatsMetric("interval_timer", 0 , "Write_To_Read_Transitions_At_Eviction",   &writeToReadTransitionsAtEviction);
+      registerStatsMetric("interval_timer", 0 , "Read_To_Write_Transitions_At_Eviction",   &readToWriteTransitionsAtEviction);
+      registerStatsMetric("interval_timer", 0 , "Read_Intense_Block_Counter",              &read_intense_block_counter);
+      registerStatsMetric("interval_timer", 0 , "Write_Intense_Block_Counter",             &write_intense_block_counter);
+      registerStatsMetric("interval_timer", 0 , "Deadblock_Counter",                       &deadblock_counter);
+      registerStatsMetric("interval_timer", 0 , "Valid_Block_Evicted",                     &validBlockEvicted);
+
+
+      registerStatsMetric("interval_timer", 0 , "Read_Intense_Blocks_M",                  &readIntenseBlocksM1               );
+      registerStatsMetric("interval_timer", 0 , "Write_Intense_Blocks_M",                 &writeIntenseBlocksM1              );
+      registerStatsMetric("interval_timer", 0 , "Read_Intense_Blocks_MDuringMigrate",      &readIntenseBlocksMDuringWrite     );
+      registerStatsMetric("interval_timer", 0 , "Write_Intense_Blocks_MDuringMigrate",     &writeIntenseBlocksMDuringWrite    );
+
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MA",                &blocksReadBeforeM1020             );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MB",               &blocksReadBeforeM12040            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MC",               &blocksReadBeforeM14060            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MD",               &blocksReadBeforeM16080            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_ME",              &blocksReadBeforeM180100           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MDuringWriteA",      &blocksReadBeforeMDuringWrite020   );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MDuringWriteB",     &blocksReadBeforeMDuringWrite2040  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MDuringWriteC",     &blocksReadBeforeMDuringWrite4060  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MDuringWriteD",     &blocksReadBeforeMDuringWrite6080  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_Before_MDuringWriteE",    &blocksReadBeforeMDuringWrite80100 );
+
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MA",                &blocksReadAfterM1020             );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MB",               &blocksReadAfterM12040            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MC",               &blocksReadAfterM14060            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MD",               &blocksReadAfterM16080            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_ME",              &blocksReadAfterM180100           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MDuringWriteA",      &blocksReadAfterMDuringWrite020   );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MDuringWriteB",     &blocksReadAfterMDuringWrite2040  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MDuringWriteC",     &blocksReadAfterMDuringWrite4060  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MDuringWriteD",     &blocksReadAfterMDuringWrite6080  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Read_After_MDuringWriteE",    &blocksReadAfterMDuringWrite80100 );
+
+
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MA",               &blocksWriteBeforeM1020            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MB",              &blocksWriteBeforeM12040           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MC",              &blocksWriteBeforeM14060           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MD",              &blocksWriteBeforeM16080           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_ME",             &blocksWriteBeforeM180100          );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MDuringWriteA",     &blocksWriteBeforeMDuringWrite020  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MDuringWriteB",    &blocksWriteBeforeMDuringWrite2040 );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MDuringWriteC",    &blocksWriteBeforeMDuringWrite4060 );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MDuringWriteD",    &blocksWriteBeforeMDuringWrite6080 );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_Before_MDuringWriteE",   &blocksWriteBeforeMDuringWrite80100);
+
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MA",               &blocksWriteAfterM1020            );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MB",              &blocksWriteAfterM12040           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MC",              &blocksWriteAfterM14060           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MD",              &blocksWriteAfterM16080           );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_ME",             &blocksWriteAfterM180100          );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MDuringWriteA",     &blocksWriteAfterMDuringWrite020  );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MDuringWriteB",    &blocksWriteAfterMDuringWrite2040 );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MDuringWriteC",    &blocksWriteAfterMDuringWrite4060 );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MDuringWriteD",    &blocksWriteAfterMDuringWrite6080 );
+      registerStatsMetric("interval_timer", 0 , "Blocks_Write_After_MDuringWriteE",   &blocksWriteAfterMDuringWrite80100);
+
+      registerStatsMetric("interval_timer", 0 , "M_Count",                               &m1Count                          );
+      registerStatsMetric("interval_timer", 0 , "Migrate_During_Write_Count",             &mDuringWriteCount                );
+
+      registerStatsMetric("interval_timer", 0 , "SRAM_Read_Before_Migration",                  &SRAMReadBeforeMigration    );
+      registerStatsMetric("interval_timer", 0 , "SRAM_Read_After_Migration",                   &SRAMReadAfterMigration     );
+      registerStatsMetric("interval_timer", 0 , "SRAM_Write_Before_Migration",                 &SRAMWriteBeforeMigration   );
+      registerStatsMetric("interval_timer", 0 , "SRAM_Write_After_Migration",                  &SRAMWriteAfterMigration    );
+      registerStatsMetric("interval_timer", 0 , "STTRAM_Read_Before_Migration",                &STTRAMReadBeforeMigration  );
+      registerStatsMetric("interval_timer", 0 , "STTRAM_Read_After_Migration",                 &STTRAMReadAfterMigration   );
+      registerStatsMetric("interval_timer", 0 , "STTRAM_Write_Before_Migration",               &STTRAMWriteBeforeMigration );
+      registerStatsMetric("interval_timer", 0 , "STTRAM_Write_After_Migration",                &STTRAMWriteAfterMigration  );
+       
+
+      
 
    }
 }
@@ -406,6 +575,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                m_deadblock[i] = 0;
 
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1 
+
                moveToMRU(i);
                return i;
             }
@@ -429,6 +610,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                m_deadblock[i] = 0;
 
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+
                moveToMRU(i);
                return i;
             }
@@ -448,6 +641,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             read_array[i] = 0;
             access_counter[i] = 0;
             m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
             return i;
@@ -456,6 +661,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
 
       //INVALID BLOCK NOT FOUND
+      
       // Make m_num_attemps attempts at evicting the block at LRU position
       for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
       {
@@ -519,6 +725,210 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
 
 
+
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+
+         
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+
+         
+
+
+
+
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
          m_TI[index]=eip_truncated;
          m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
 
@@ -535,7 +945,21 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
          m_deadblock[index] = 0;
-               
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1
+         
+         validBlockEvicted++;
+
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
 
@@ -566,6 +990,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                read_array[i] = 0;
                access_counter[i] = 0;
                m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
                moveToMRU(i);
                return i;
@@ -588,6 +1024,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                read_array[i] = 0;
                access_counter[i] = 0;
                m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
                moveToMRU(i);
                return i;
@@ -608,6 +1056,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             read_array[i] = 0;
             access_counter[i] = 0;
             m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
             return i;
@@ -616,6 +1076,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
 
       //INVALID BLOCK NOT FOUND
+      
       // Make m_num_attemps attempts at evicting the block at LRU position
       for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
       {
@@ -675,6 +1136,205 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
          if(m_wcnt[m_TI[index]] != 0)
             m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
+
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+
+         
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+
+         
+
+
+
+
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
          
 
          m_TI[index]=eip_truncated;
@@ -692,7 +1352,21 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
          m_deadblock[index] = 0;
-               
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1
+         
+         validBlockEvicted++;
+
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt);
 
@@ -721,6 +1395,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                m_deadblock[i] = 0;
 
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+
                moveToMRU(i);
                return i;
 
@@ -741,6 +1427,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                m_deadblock[i] = 0;
 
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+
                moveToMRU(i);
                return i;
             }
@@ -757,6 +1455,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             read_array[i] = 0;
             access_counter[i] = 0;
             m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
             return i;
@@ -764,6 +1474,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       }
 
       //INVALID BLOCK NOT FOUND
+      
       for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
       {
          UInt32 index = 0;
@@ -779,9 +1490,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
-            migrate_during_write(index, eip_truncated);  //migrates write index blocks from stt to sram during write
          }
-         else //TI is hot
+         else ////TI is hot
          {
             for (UInt32 i = 0; i < SRAM_ways; i++)
             {
@@ -824,6 +1534,205 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          if(m_wcnt[m_TI[index]] != 0)
             m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
 
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+
+         
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+
+         
+
+
+
+
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
          m_TI[index]=eip_truncated;
@@ -840,6 +1749,20 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
          m_deadblock[index] = 0;
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1
+
+         validBlockEvicted++;
 
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
@@ -868,6 +1791,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                m_deadblock[i] = 0;
 
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+
                moveToMRU(i);
                return i;
 
@@ -888,6 +1823,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                access_counter[i] = 0;
                m_deadblock[i] = 0;
 
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0;
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1 
+
                moveToMRU(i);
                return i;
             }
@@ -904,6 +1851,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             read_array[i] = 0;
             access_counter[i] = 0;
             m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
             return i;
@@ -911,6 +1870,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       }
 
       //INVALID BLOCK NOT FOUND
+      
       for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
       {
          UInt32 index = 0;
@@ -926,7 +1886,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
-            migrate_during_write(index, eip_truncated);  //migrates write index blocks from stt to sram during write
+            
          }
          else //TI is hot
          {
@@ -971,6 +1931,202 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          if(m_wcnt[m_TI[index]] != 0)
             m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
 
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+
+         
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+
+         
+
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
          m_TI[index]=eip_truncated;
@@ -987,6 +2143,20 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
          m_deadblock[index] = 0;
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1
+
+         validBlockEvicted++;
 
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
@@ -1021,6 +2191,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                read_array[i] = 0;
                access_counter[i] = 0;
                m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
                moveToMRU(i);
                //printf("invalid block found in sttram\n");
@@ -1044,6 +2226,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                read_array[i] = 0;
                access_counter[i] = 0;
                m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
                moveToMRU(i);
                //printf("invalid block found in sram\n");
@@ -1065,6 +2259,18 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             read_array[i] = 0;
             access_counter[i] = 0;
             m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
             //printf("invalid block found, but not in proper partition\n");
@@ -1073,6 +2279,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       }
       
       //INVALID BLOCK NOT FOUND
+      validBlockEvicted++;
       // Make m_num_attemps attempts at evicting the block at LRU position
       for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
       {
@@ -1091,7 +2298,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   max_bits = m_lru_bits[i];
                }
             }
-            migrate_during_write(index, eip_truncated);  //migrates write index blocks from stt to sram during write
+            
          }
    
          else  //TI is hot. select victim from SRAM
@@ -1150,6 +2357,212 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          if(m_wcnt[m_TI[index]] != 0)
             m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
 
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+         
+
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+
+         
+
+
+
+
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
          
          
          m_TI[index]=eip_truncated;
@@ -1166,7 +2579,21 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          write_array[index] = 0;  //reset the counters on eviction
          read_array[index] = 0;
          m_deadblock[index] = 0;
-             
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1     
+
+         validBlockEvicted++;
+
          // Mark our newly-inserted line as most-recently used
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
@@ -1188,6 +2615,9 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
 {
    m_set_info->increment(m_lru_bits[accessed_index]);
    moveToMRU(accessed_index);
+
+
+
    access_counter[accessed_index]++;   //number of accesses to a block
 
    if(m_dcnt[m_TI[accessed_index]] != 0)
@@ -1199,11 +2629,108 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
    {
       m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
       write_array[accessed_index]++;   //write_array is the number of writes to a block
+
+      if(m1_flag[accessed_index]==0) //The block has not been migrated
+      {
+         m_write_before_m1[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteBeforeMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteBeforeMigration++;         
+      }
+
+      else if(m1_flag[accessed_index]==1)  //The block has been migrated
+      {
+         m_write_after_m1[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteAfterMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteAfterMigration++;
+         
+      }
+      else
+         printf("ERROR!! m1 flag is %d\n", m1_flag[accessed_index]);
+
+      if(mduringwrite_flag[accessed_index]==0) //The block has not been migrated
+      {
+         m_write_before_mduringwrite[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteBeforeMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteBeforeMigration++;
+         
+      }
+      else if(mduringwrite_flag[accessed_index]==1)  //The block has been migrated
+      {
+         m_write_after_mduringwrite[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteAfterMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteAfterMigration++;
+      }
+      else
+         printf("ERROR!! mduringwrite flag is %d\n", mduringwrite_flag[accessed_index]);
+
+
+
    }
    else if(write_flag==0)
    {
       m_cost[accessed_index]=m_cost[accessed_index]-Er;
       read_array[accessed_index]++;    //read_array is the number of reads to a block
+
+      if(m1_flag[accessed_index]==0) //The block has not been migrated
+      {
+         m_read_before_m1[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMReadBeforeMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMReadBeforeMigration++;
+      }
+      else if(m1_flag[accessed_index]==1)  //The block has been migrated
+      {
+         m_read_after_m1[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMReadAfterMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMReadAfterMigration++;
+
+
+      }
+      else
+         printf("ERROR!! m1 flag is %d\n", m1_flag[accessed_index]);
+
+
+
+      if(mduringwrite_flag[accessed_index]==0) //The block has not been migrated
+      {
+         m_read_before_mduringwrite[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMReadBeforeMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMReadBeforeMigration++;
+      }
+      else if(mduringwrite_flag[accessed_index]==1)  //The block has been migrated
+      {
+         m_read_after_mduringwrite[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMReadAfterMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMReadAfterMigration++;
+      }
+      else
+         printf("ERROR!! mduringwrite flag flag is %d\n", mduringwrite_flag[accessed_index]);
+
+
+
    }
    else
       printf("error: value of write_flag is %d \n", write_flag); 
@@ -1241,6 +2768,58 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, In
    
    if ((accessed_index>=0) && (accessed_index<m_associativity))
    {
+
+      if(m1_flag[accessed_index]==0) //The block has not been migrated
+      {
+         m_write_before_m1[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteBeforeMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteBeforeMigration++; 
+
+      }
+      else if(m1_flag[accessed_index]==1)  //The block has been migrated
+      {
+         m_write_after_m1[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteAfterMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteAfterMigration++; 
+      }
+      else
+         printf("ERROR!! m1 flag is %d\n", m1_flag[accessed_index]);
+
+
+
+      if(mduringwrite_flag[accessed_index]==0) //The block has not been migrated
+      {
+         m_write_before_mduringwrite[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteBeforeMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteBeforeMigration++; 
+
+      }
+      else if(mduringwrite_flag[accessed_index]==1)  //The block has been migrated
+      {
+         m_write_after_mduringwrite[accessed_index]++;
+
+         if((accessed_index>=0) && (accessed_index<SRAM_ways)) //SRAM Write hit before migration
+            SRAMWriteAfterMigration++;
+         else if ((accessed_index>=SRAM_ways) && (SRAM_ways<m_associativity)) //STTRAM Write hit before migration
+            STTRAMWriteAfterMigration++; 
+
+      }
+      else
+         printf("ERROR!! mduringwrite flag flag is %d\n", mduringwrite_flag[accessed_index]);
+
+
+
+
+
       m_deadblock[accessed_index] = 1;    //Newton's method
 
       if(m_dcnt[m_TI[accessed_index]] != 0)
@@ -1248,28 +2827,6 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, In
 
       if(m_wcnt[m_TI[accessed_index]] != 255)
          m_wcnt[m_TI[accessed_index]]++;  //decrement write burst counter on eviction
-
-      
-      
-      if((accessed_index>=SRAM_ways) && (accessed_index<m_associativity))
-      {
-         //TO-DO: modify updateReplacementIndex2 to include eip_truncated
-         migrate_during_write(accessed_index, eip_truncated);  //migrates write index blocks from stt to sram during write. Written by ARINDAM
-
-         /*
-         //[ARINDAM]
-         //call migrate2() function
-         //if the write hit is in STTRAM and the block is write burst, we need to place the block in SRAM
-         //migrate2() function will do that
-         if(m_wcnt[m_TI[accessed_index]]>W)
-         {
-            migrate2(accessed_index);
-         }
-         */
-      }
-      
-
-      
 
       access_counter[accessed_index]++;
 
@@ -1286,6 +2843,27 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, In
             
          access_counter[accessed_index] = 0;
       }
+      
+      
+      if((accessed_index>=SRAM_ways) && (accessed_index<m_associativity))
+      {
+         //TO-DO: modify updateReplacementIndex2 to include eip_truncated
+         migrate_during_write(accessed_index, eip_truncated);  //migrates write index blocks from stt to sram during write; 
+
+         /*
+         //[ARINDAM]
+         //call migrate2() function
+         //if the write hit is in STTRAM and the block is write burst, we need to place the block in SRAM
+         //migrate2() function will do that
+         if(m_wcnt[m_TI[accessed_index]]>W)
+         {
+            migrate2(accessed_index);
+         }
+         */
+      }
+          
+
+      
 
    }
    else 
@@ -1328,9 +2906,10 @@ CacheSetPHC::truncatedEipCalculation(IntPtr a)  //hashing
 void
 CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
 {
-	UInt32 stt_index = -1;
-	UInt8 local_max_bits = 0;
-	CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
+   
+   UInt32 stt_index = -1;
+   UInt8 local_max_bits = 0;
+   CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
 
    UInt8 temp_lru_bits = 0;
    UInt16 temp_TI = 0;
@@ -1339,8 +2918,21 @@ CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
    UInt16 temp_read_array = 0;
    UInt16 temp_access_counter = 0;
    UInt8 temp_deadblock = 0;
-	
-	if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)          //PC based deadblock prediction
+
+   UInt64 temp_m_read_before_m1  = 0;
+   UInt64 temp_m_write_before_m1 = 0;  
+   UInt64 temp_m_read_after_m1   = 0; 
+   UInt64 temp_m_write_after_m1  = 0; 
+   UInt64 temp_m1_flag           = 0;  
+
+   UInt64 temp_m_read_before_mduringwrite    = 0;
+   UInt64 temp_m_write_before_mduringwrite   = 0;  
+   UInt64 temp_m_read_after_mduringwrite     = 0; 
+   UInt64 temp_m_write_after_mduringwrite    = 0; 
+   UInt64 temp_mduringwrite_flag             = 0;  
+   
+
+   if(m_dcnt[m_TI[sram_index]]<dcnt_threshold)          //PC based deadblock prediction
    //if(m_deadblock[sram_index]!=0)                     //Newton's deadblock prediction (daaip)
    {
       //find stt_index
@@ -1356,36 +2948,75 @@ CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
       if((stt_index>=SRAM_ways) && (stt_index<m_associativity))
       //swapping the blocks with index as stt_index and sram_index   
       {
+         m1Count++;
+
+         m1_flag[sram_index] = 1;   //This block has been migrated
+
 
          temp_cache_block_info->clone(m_cache_block_info_array[stt_index]);
          m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[sram_index]);
          m_cache_block_info_array[sram_index]->clone(temp_cache_block_info);
 
-         temp_lru_bits = m_lru_bits[sram_index];
-         temp_TI = m_TI[sram_index]; 
-         temp_cost = m_cost[sram_index]; 
-         temp_write_array = write_array[sram_index];
-         temp_read_array = read_array[sram_index];
-         temp_access_counter = access_counter[sram_index];
-         temp_deadblock = m_deadblock[sram_index];
+         /////////////////////////////////////////////////////////////////////
+         temp_lru_bits        = m_lru_bits[sram_index];
+         temp_TI              = m_TI[sram_index]; 
+         temp_cost            = m_cost[sram_index]; 
+         temp_write_array     = write_array[sram_index];
+         temp_read_array      = read_array[sram_index];
+         temp_access_counter  = access_counter[sram_index];
+         temp_deadblock       = m_deadblock[sram_index];
 
-         m_lru_bits[sram_index] = m_lru_bits[stt_index];
-         m_TI[sram_index] = m_TI[stt_index]; 
-         m_cost[sram_index] = m_cost[stt_index]; 
-         write_array[sram_index] = write_array[stt_index];
-         read_array[sram_index] = read_array[stt_index];
-         access_counter[sram_index] = access_counter[stt_index];
-         m_deadblock[sram_index] = m_deadblock[stt_index];
+         temp_m_read_before_m1            =  m_read_before_m1[sram_index];
+         temp_m_write_before_m1           =  m_write_before_m1[sram_index]; 
+         temp_m_read_after_m1             =  m_read_after_m1[sram_index];
+         temp_m_write_after_m1            =  m_write_after_m1[sram_index];
+         temp_m1_flag                     =  m1_flag[sram_index];
+         temp_m_read_before_mduringwrite  =  m_read_before_mduringwrite[sram_index];
+         temp_m_write_before_mduringwrite =  m_write_before_mduringwrite[sram_index];
+         temp_m_read_after_mduringwrite   =  m_read_after_mduringwrite[sram_index];
+         temp_m_write_after_mduringwrite  =  m_write_after_mduringwrite[sram_index];
+         temp_mduringwrite_flag           =  mduringwrite_flag[sram_index];
 
-         m_lru_bits[stt_index] = temp_lru_bits;
-         m_TI[stt_index] = temp_TI; 
-         m_cost[stt_index] = temp_cost; 
-         write_array[stt_index] = temp_write_array;
-         read_array[stt_index] = temp_read_array;
-         access_counter[stt_index] = temp_access_counter;
-         m_deadblock[stt_index] = temp_deadblock;
+         /////////////////////////////////////////////////////////////////////
+         m_lru_bits[sram_index]                    = m_lru_bits[stt_index];
+         m_TI[sram_index]                          = m_TI[stt_index]; 
+         m_cost[sram_index]                        = m_cost[stt_index]; 
+         write_array[sram_index]                   = write_array[stt_index];
+         read_array[sram_index]                    = read_array[stt_index];
+         access_counter[sram_index]                = access_counter[stt_index];
+         m_deadblock[sram_index]                   = m_deadblock[stt_index];
 
-         //migrate_flag = 1; //This will be cross checked in cache controller inside insertCacheBlock function, to account for penalty
+         m_read_before_m1[sram_index]              =  m_read_before_m1[stt_index];
+         m_write_before_m1[sram_index]             =  m_write_before_m1[stt_index];
+         m_read_after_m1[sram_index]               =  m_read_after_m1[stt_index];
+         m_write_after_m1[sram_index]              =  m_write_after_m1[stt_index];
+         m1_flag[sram_index]                       =  m1_flag[stt_index];
+         m_read_before_mduringwrite[sram_index]    =  m_read_before_mduringwrite[stt_index];
+         m_write_before_mduringwrite[sram_index]   =  m_write_before_mduringwrite[stt_index];
+         m_read_after_mduringwrite[sram_index]     =  m_read_after_mduringwrite[stt_index];
+         m_write_after_mduringwrite[sram_index]    =  m_write_after_mduringwrite[stt_index];
+         mduringwrite_flag[sram_index]             =  mduringwrite_flag[stt_index];
+
+         /////////////////////////////////////////////////////////////////////
+         m_lru_bits[stt_index]                  = temp_lru_bits;
+         m_TI[stt_index]                        = temp_TI; 
+         m_cost[stt_index]                      = temp_cost; 
+         write_array[stt_index]                 = temp_write_array;
+         read_array[stt_index]                  = temp_read_array;
+         access_counter[stt_index]              = temp_access_counter;
+         m_deadblock[stt_index]                 = temp_deadblock;
+
+         m_read_before_m1[stt_index]            = temp_m_read_before_m1;                       
+         m_write_before_m1[stt_index]           = temp_m_write_before_m1;          
+         m_read_after_m1[stt_index]             = temp_m_read_after_m1;            
+         m_write_after_m1[stt_index]            = temp_m_write_after_m1;           
+         m1_flag[stt_index]                     = temp_m1_flag;                    
+         m_read_before_mduringwrite[stt_index]  = temp_m_read_before_mduringwrite; 
+         m_write_before_mduringwrite[stt_index] = temp_m_write_before_mduringwrite;
+         m_read_after_mduringwrite[stt_index]   = temp_m_read_after_mduringwrite;  
+         m_write_after_mduringwrite[stt_index]  = temp_m_write_after_mduringwrite; 
+         mduringwrite_flag[stt_index]           = temp_mduringwrite_flag;  
+         extern_migrate_flag = 1; //This will be cross checked in cache controller inside insertCacheBlock function, to account for penalty
       }
 
    }
@@ -1393,8 +3024,9 @@ CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
    {
 
    }
-	
-	
+   
+   
+   
 }
 
 void
@@ -1462,70 +3094,166 @@ CacheSetPHC::migrate2(UInt32 stt_index) //this function swaps a write burst file
 }
 
 void
-CacheSetPHC::migrate_during_write(UInt32 stt_index, UInt16 eip_truncated)    //called during both core-write and writeback. written by ARINDAM
+CacheSetPHC::migrate_during_write(UInt32 stt_index, UInt16 eip_truncated)    //called during  writeback. written by ARINDAM
+
 //Motive: If a block to be written is found out to be write intensive, then migrate the block to SRAM
 //A block is deadblock if m_dcnt of eip_truncated is less than threshold
 //A block is read intensive if state of eip_truncated is less than threshold and it is not a deadblock
 //A block is write intensive if it is neither deablock nor  
 //QUESTION: How to select the victim block from SRAM??
+//If the function is called by updateReplacementIndex2, victim should be the most read intense block
+
 {
+   
+   
    if((m_dcnt[eip_truncated]<dcnt_threshold) && (m_state[eip_truncated]>=state_threshold))   //not dead and write intense
    {
       UInt32 least_cost=255;
       UInt32 sram_index=-1;
+      
 
       CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
 
-      UInt8 temp_lru_bits = 0;
-      UInt16 temp_TI = 0;
-      UInt8 temp_cost = 0;
-      UInt16 temp_write_array = 0;
-      UInt16 temp_read_array = 0;
+      UInt8 temp_lru_bits        = 0;
+      UInt16 temp_TI             = 0;
+      UInt8 temp_cost            = 0;
+      UInt16 temp_write_array    = 0;
+      UInt16 temp_read_array     = 0;
       UInt16 temp_access_counter = 0;
-      UInt8 temp_deadblock = 0;
+      UInt8 temp_deadblock       = 0;
 
+      UInt64 temp_m_read_before_m1  = 0;
+      UInt64 temp_m_write_before_m1 = 0;  
+      UInt64 temp_m_read_after_m1   = 0; 
+      UInt64 temp_m_write_after_m1  = 0; 
+      UInt64 temp_m1_flag           = 0;  
 
-      for (UInt32 i=0; i<SRAM_ways; i++)
+      UInt64 temp_m_read_before_mduringwrite  = 0;
+      UInt64 temp_m_write_before_mduringwrite = 0;  
+      UInt64 temp_m_read_after_mduringwrite   = 0; 
+      UInt64 temp_m_write_after_mduringwrite  = 0; 
+      UInt64 temp_mduringwrite_flag           = 0; 
+
+      
+      //for (UInt32 i=0; i<SRAM_ways; i++)
+      //{
+      //   if ((m_cost[i]<least_cost) && isValidReplacement(i))  //most read intense block
+      //   {
+      //      least_cost=m_cost[i];
+      //      sram_index = i;
+      //   }
+      //}
+      
+
+      UInt8 tmp_state[SRAM_ways]={0};
+      UInt32 tmp_index_array[4]={0, 1, 2, 3};
+
+      for (UInt32 c=0; c<SRAM_ways; c++)
+         tmp_state[c]=m_state[m_TI[c]];
+
+      
+      for (UInt32 c=0; c<(SRAM_ways-1); c++)
       {
-         if ((m_cost[i]<least_cost) && isValidReplacement(i))
+         for (UInt32 d=0; d<(SRAM_ways-c-1); d++)
          {
-            least_cost=m_cost[i];
-            sram_index = i;
+
+            if (tmp_state[d] > tmp_state[d+1]) // For decreasing order use < 
+            {
+               UInt8 swap_state = tmp_state[d];
+               tmp_state[d] = tmp_state[d+1];
+               tmp_state[d+1] = swap_state;
+              
+               UInt32 swap_index = tmp_index_array[d];
+               tmp_index_array[d] = tmp_index_array[d+1];
+               tmp_index_array[d+1] = swap_index;
+            }
          }
       }
 
+      for (UInt32 c=0; c<SRAM_ways; c++)
+      {
+         if((isValidReplacement(tmp_index_array[c])) && (m_state[m_TI[tmp_index_array[c]]]<m_state[m_TI[stt_index]]))
+         {
+            sram_index = tmp_index_array[c];
+            break;
+         }
+      }
+      
+      
+
       if ((sram_index>=0) && (sram_index<SRAM_ways))
       {
+         mDuringWriteCount++;
+
+         mduringwrite_flag[stt_index]=1; //This flag is set if migration is done
 
          temp_cache_block_info->clone(m_cache_block_info_array[stt_index]);
          m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[sram_index]);
          m_cache_block_info_array[sram_index]->clone(temp_cache_block_info);
 
-         temp_lru_bits = m_lru_bits[sram_index];
-         temp_TI = m_TI[sram_index]; 
-         temp_cost = m_cost[sram_index]; 
-         temp_write_array = write_array[sram_index];
-         temp_read_array = read_array[sram_index];
-         temp_access_counter = access_counter[sram_index];
-         temp_deadblock = m_deadblock[sram_index];
+         /////////////////////////////////////////////////////////////////////
+         temp_lru_bits        = m_lru_bits[sram_index];
+         temp_TI              = m_TI[sram_index]; 
+         temp_cost            = m_cost[sram_index]; 
+         temp_write_array     = write_array[sram_index];
+         temp_read_array      = read_array[sram_index];
+         temp_access_counter  = access_counter[sram_index];
+         temp_deadblock       = m_deadblock[sram_index];
 
-         m_lru_bits[sram_index] = m_lru_bits[stt_index];
-         m_TI[sram_index] = m_TI[stt_index]; 
-         m_cost[sram_index] = m_cost[stt_index]; 
-         write_array[sram_index] = write_array[stt_index];
-         read_array[sram_index] = read_array[stt_index];
-         access_counter[sram_index] = access_counter[stt_index];
-         m_deadblock[sram_index] = m_deadblock[stt_index];
+         temp_m_read_before_m1            =  m_read_before_m1[sram_index];
+         temp_m_write_before_m1           =  m_write_before_m1[sram_index]; 
+         temp_m_read_after_m1             =  m_read_after_m1[sram_index];
+         temp_m_write_after_m1            =  m_write_after_m1[sram_index];
+         temp_m1_flag                     =  m1_flag[sram_index];
+         temp_m_read_before_mduringwrite  =  m_read_before_mduringwrite[sram_index];
+         temp_m_write_before_mduringwrite =  m_write_before_mduringwrite[sram_index];
+         temp_m_read_after_mduringwrite   =  m_read_after_mduringwrite[sram_index];
+         temp_m_write_after_mduringwrite  =  m_write_after_mduringwrite[sram_index];
+         temp_mduringwrite_flag           =  mduringwrite_flag[sram_index];
 
-         m_lru_bits[stt_index] = temp_lru_bits;
-         m_TI[stt_index] = temp_TI; 
-         m_cost[stt_index] = temp_cost; 
-         write_array[stt_index] = temp_write_array;
-         read_array[stt_index] = temp_read_array;
-         access_counter[stt_index] = temp_access_counter;
-         m_deadblock[stt_index] = temp_deadblock;
+         /////////////////////////////////////////////////////////////////////
+         m_lru_bits[sram_index]                    = m_lru_bits[stt_index];
+         m_TI[sram_index]                          = m_TI[stt_index]; 
+         m_cost[sram_index]                        = m_cost[stt_index]; 
+         write_array[sram_index]                   = write_array[stt_index];
+         read_array[sram_index]                    = read_array[stt_index];
+         access_counter[sram_index]                = access_counter[stt_index];
+         m_deadblock[sram_index]                   = m_deadblock[stt_index];
+
+         m_read_before_m1[sram_index]              =  m_read_before_m1[stt_index];
+         m_write_before_m1[sram_index]             =  m_write_before_m1[stt_index];
+         m_read_after_m1[sram_index]               =  m_read_after_m1[stt_index];
+         m_write_after_m1[sram_index]              =  m_write_after_m1[stt_index];
+         m1_flag[sram_index]                       =  m1_flag[stt_index];
+         m_read_before_mduringwrite[sram_index]    =  m_read_before_mduringwrite[stt_index];
+         m_write_before_mduringwrite[sram_index]   =  m_write_before_mduringwrite[stt_index];
+         m_read_after_mduringwrite[sram_index]     =  m_read_after_mduringwrite[stt_index];
+         m_write_after_mduringwrite[sram_index]    =  m_write_after_mduringwrite[stt_index];
+         mduringwrite_flag[sram_index]             =  mduringwrite_flag[stt_index];
+
+         /////////////////////////////////////////////////////////////////////
+         m_lru_bits[stt_index]                  = temp_lru_bits;
+         m_TI[stt_index]                        = temp_TI; 
+         m_cost[stt_index]                      = temp_cost; 
+         write_array[stt_index]                 = temp_write_array;
+         read_array[stt_index]                  = temp_read_array;
+         access_counter[stt_index]              = temp_access_counter;
+         m_deadblock[stt_index]                 = temp_deadblock;
+
+         m_read_before_m1[stt_index]            = temp_m_read_before_m1;                       
+         m_write_before_m1[stt_index]           = temp_m_write_before_m1;          
+         m_read_after_m1[stt_index]             = temp_m_read_after_m1;            
+         m_write_after_m1[stt_index]            = temp_m_write_after_m1;           
+         m1_flag[stt_index]                     = temp_m1_flag;                    
+         m_read_before_mduringwrite[stt_index]  = temp_m_read_before_mduringwrite; 
+         m_write_before_mduringwrite[stt_index] = temp_m_write_before_mduringwrite;
+         m_read_after_mduringwrite[stt_index]   = temp_m_read_after_mduringwrite;  
+         m_write_after_mduringwrite[stt_index]  = temp_m_write_after_mduringwrite; 
+         mduringwrite_flag[stt_index]           = temp_mduringwrite_flag;          
       }
    }
+   
+   
    
 }
 
