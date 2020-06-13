@@ -41,9 +41,12 @@ class CacheSetPHC : public CacheSet
 
       void updateLoopBitPolicy(UInt32 index, UInt8 loopbit); //sn
 
+      bool isDeadBlock(UInt32 index);  //Created by Arindam
+
    protected:
       const UInt8 m_num_attempts;
       UInt8* m_lru_bits;
+      //UInt8* m_lru_bits_unified;
       UInt16* m_TI;
       UInt8* m_cost;
       UInt16* write_array;

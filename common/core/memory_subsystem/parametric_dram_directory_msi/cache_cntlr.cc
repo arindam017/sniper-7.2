@@ -31,9 +31,14 @@ static UInt64 gLLCLoads;
 static UInt64 g_timeSTTRAM;
 static UInt64 g_costSTTRAM;
 
+static UInt64 gSTTrWrite;
+static UInt64 gSTTrReads;
+static UInt64 gSramWrite;
+static UInt64 gSramReads;
+
 static UInt64 g_NumberL2WritebacksToL3;
 
-extern UInt8 extern_migrate_flag;
+extern UInt8 migrate_flag;
 
 /* If the flag is true, it indicates that a block from LLC is getting evicted.
  * In such a case, there is not need account for write to LLC (LLC being STTRAM)
@@ -252,6 +257,11 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "NumberOfL3StoreHits", &g_NumberOfL3StoreHits);
    registerStatsMetric(name, core_id, "NumberOfL3StoreMiss", &g_NumberOfL3StoreMiss);
 
+   registerStatsMetric(name, core_id, "g_STTr_Write", &gSTTrWrite);
+   registerStatsMetric(name, core_id, "g_STTr_Reads", &gSTTrReads);
+   registerStatsMetric(name, core_id, "g_Sram_Write", &gSramWrite);
+   registerStatsMetric(name, core_id, "g_Sram_Reads", &gSramReads);
+
 
    registerStatsMetric(name, core_id, "LLCStore",  &gLLCStore);
    registerStatsMetric(name, core_id, "LLCLoads",  &gLLCLoads);
@@ -278,6 +288,9 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "qbs-query-latency", &stats.qbs_query_latency);
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
    registerStatsMetric(name, core_id, "prefetches", &stats.prefetches);
+
+   
+
   
    for(CacheState::cstate_t state = CacheState::CSTATE_FIRST; state < CacheState::NUM_CSTATE_STATES; state = CacheState::cstate_t(int(state)+1)) {
       registerStatsMetric(name, core_id, String("loads-")+CStateString(state), &stats.loads_state[state]);
@@ -816,6 +829,7 @@ void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* m
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS,
                                             ShmemPerfModel::_USER_THREAD);
+        gSramWrite++;
     }
     else if (blockIndex >= (WAYS_TO_SRAM))   //STTRAM
     //else if (blockIndex >=0)   //STTRAM
@@ -823,6 +837,7 @@ void CacheCntlr::accountForWriteLatencyOfLLC(IntPtr address, CacheMasterCntlr* m
         getMemoryManager()->incrElapsedTime(m_mem_component,
                                             CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS,
                                             ShmemPerfModel::_USER_THREAD);
+        gSTTrWrite++;
     }
 }
 
@@ -926,11 +941,20 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if ((mem_op_type == Core::READ)
       &&  (m_mem_component == MemComponent::L3_CACHE))
       {
-          gLLCLoads++;
-          if (cache_hit)
-          {
-              g_NumberOfL3LoadHits++;
-          }
+
+         UInt32 blockIndex2 = m_master->m_cache->getBlockIndex(address);
+
+         if (blockIndex2 < (WAYS_TO_SRAM))
+            gSramReads++;
+         else if (blockIndex2 >= (WAYS_TO_SRAM))
+            gSTTrReads++;
+         
+
+         gLLCLoads++;
+         if (cache_hit)
+         {
+             g_NumberOfL3LoadHits++;
+         }
       }
    }
 
@@ -1544,13 +1568,13 @@ CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* 
    
    // Defined by ARINDAM. Accounts for extra penalty when a living block is 
    // evicted from SRAM and is preserved in STTRAM (done in PHC)
-   
-   if(extern_migrate_flag==1)
+   /*
+   if(migrate_flag==1)
    {
-      getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
-      extern_migrate_flag = 0;
+      //getMemoryManager()->incrElapsedTime(MemComponent::L3_CACHE, CachePerfModel::ACCESS_CACHE_WRITEDATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+      migrate_flag = 0;
    }
-   
+   */
    
    
 

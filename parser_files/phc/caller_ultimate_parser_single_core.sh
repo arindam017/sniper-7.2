@@ -13,7 +13,9 @@ parser="./parser_all_qsize.py"
 #REUSE SELECTED BENCHMARKS = 15
 #benchmarks=(astar cactusADM gcc GemsFDTD lbm leslie libq mcf omnetpp soplex sphinx zeusmp)	#these 8 benchmarks show variations when baseline phc is compared with phc_dcnt or phc_daaip
 #benchmarks=(astar bwaves bzip cactusADM gcc GemsFDTD gobmk gromacs hmmer lbm leslie libq mcf milc namd omnetpp perlbench sjeng soplex sphinx tonto wrf zeusmp)
-benchmarks=(cactusADM lbm libq zeusmp)
+#benchmarks=(astar bwaves bzip gcc GemsFDTD gobmk gromacs hmmer milc namd perlbench sjeng tonto wrf)
+benchmarks=(lbm libq)
+
 
 
 #Thrashing benchmarks = 8 milc to be added.
@@ -29,14 +31,14 @@ benchmarks=(cactusADM lbm libq zeusmp)
 #suffix=(1 10 20 100)
 #benchmarks=(cactusADM mcf sphinx milc astar leslie lbm bwaves libq)
 #benchmarks=(cactusADM sphinx)
-for i in {0..3}
+for i in {0..1}
     do
 	echo "===================================================================================================================================="
 	echo ""
 	echo ""
 	echo ""
 	echo ""
-	/home/arindam/Desktop/Sniper/sniper-7.2_para23_2/parser_files/phc/ultimate_parser_single_core.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_2/expt_results/phc_para23_2/${benchmarks[i]} 1
+	/home/arindam/Desktop/Sniper/sniper-7.2_para23_1/parser_files/phc/ultimate_parser_single_core.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_1/expt_results/phc_para23_1/${benchmarks[i]} 1
 	echo ""
 	echo ""
 	echo ""
