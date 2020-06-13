@@ -46,7 +46,7 @@ class CacheSetPHC : public CacheSet
    protected:
       const UInt8 m_num_attempts;
       UInt8* m_lru_bits;
-      //UInt8* m_lru_bits_unified;
+      UInt8* m_lru_bits_unified;
       UInt16* m_TI;
       UInt8* m_cost;
       UInt16* write_array;

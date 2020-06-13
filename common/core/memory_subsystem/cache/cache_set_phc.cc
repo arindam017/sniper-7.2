@@ -163,8 +163,8 @@ CacheSetPHC::CacheSetPHC(
    , m_set_info(set_info)
 { 
 
-   m_lru_bits = new UInt8[m_associativity];
-   //m_lru_bits_unified = new UInt8[m_associativity];
+   m_lru_bits = new UInt8[m_associativity];  //This will be used as two seperate LRU stacks
+   m_lru_bits_unified = new UInt8[m_associativity];   //This is a unified LRU stack
 
    //for (UInt32 i = 0; i < m_associativity; i++)
    //   m_lru_bits[i] = i;
@@ -174,8 +174,9 @@ CacheSetPHC::CacheSetPHC(
       m_lru_bits[i]=i;
    for (UInt32 i=SRAM_ways; i<m_associativity; i++)
       m_lru_bits[i] = (i-SRAM_ways);
-   //for (UInt32 i = 0; i < m_associativity; i++)
-   //   m_lru_bits_unified[i] = i;
+
+   for (UInt32 i = 0; i < m_associativity; i++)
+      m_lru_bits_unified[i] = i; //unified LRU stack
 
 
 
@@ -323,7 +324,7 @@ CacheSetPHC::CacheSetPHC(
 CacheSetPHC::~CacheSetPHC()
 {
    delete [] m_lru_bits;
-   //delete [] m_lru_bits_unified;
+   delete [] m_lru_bits_unified;
    delete [] m_TI;
    delete [] m_cost;
    delete [] write_array;
@@ -1378,8 +1379,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 void
 CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
 {
-   m_set_info->increment(m_lru_bits[accessed_index]);
-   //m_set_info->increment(m_lru_bits_unified[accessed_index]);
+   m_set_info->increment(m_lru_bits[accessed_index]); //for the seperate LRU stacks
+   m_set_info->increment(m_lru_bits_unified[accessed_index]);  // for unified LRU stack
    moveToMRU(accessed_index);
 
 
@@ -1643,7 +1644,7 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, In
 void
 CacheSetPHC::moveToMRU(UInt32 accessed_index)
 {
-   if((accessed_index<SRAM_ways) && (accessed_index>=0))
+   if((accessed_index<SRAM_ways) && (accessed_index>=0)) //if the accessed_index is for SRAM partition
    {
       for (UInt32 i = 0; i < SRAM_ways; i++)
       {
@@ -1653,7 +1654,7 @@ CacheSetPHC::moveToMRU(UInt32 accessed_index)
       m_lru_bits[accessed_index] = 0;
    }
 
-   else if((accessed_index<m_associativity) && (accessed_index>=SRAM_ways))
+   else if((accessed_index<m_associativity) && (accessed_index>=SRAM_ways))   //if the accessed_index is for STTRAM partition
    {
       for (UInt32 i = SRAM_ways; i < m_associativity; i++)
       {
@@ -1668,7 +1669,7 @@ CacheSetPHC::moveToMRU(UInt32 accessed_index)
 
    }
 
-   /*
+   //moveToMRU for unified LRU
    if((accessed_index>=0) && (accessed_index<m_associativity))
    {
       for (UInt32 i = 0; i < m_associativity; i++)
@@ -1678,7 +1679,7 @@ CacheSetPHC::moveToMRU(UInt32 accessed_index)
       }
       m_lru_bits_unified[accessed_index] = 0;
    }
-   */
+   
 }
 
 UInt16 
