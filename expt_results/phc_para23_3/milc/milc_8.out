@@ -1,0 +1,103 @@
+                                                | Core 0    
+  Instructions                                  |  249999877
+  Cycles                                        |  385206570
+  IPC                                           |      0.649
+  Time (ns)                                     |  144814500
+  Idle time (ns)                                |        -37
+  Idle time (%)                                 |      -0.0%
+  Write to Read Transition Count at an Eviction |      40980
+  Read to Write Transition Count at an Eviction |     330331
+  Read Intense Block Counter                    |        885
+  Write Intense Block Counter                   |         75
+  Deadblock Counter                             |       4154
+  Valid Blocks Evicted                          |   11102225
+  Read Intense Blocks M                         |        930
+  Write Intense Blocks M                        |      36347
+  Read Intense Blocks MDuringMigrate            |          1
+  Write Intense Blocks MDuringMigrate           |          1
+  M Count                                       |      39947
+  Migrate During Write Count                    |          1
+  SRAM Read Before Migration                    |     224678
+  SRAM Read After Migration                     |          1
+  SRAM Write Before Migration                   |    3306608
+  SRAM Write After Migration                    |          1
+  STTRAM Read Before Migration                  |    1071765
+  STTRAM Read After Migration                   |       5881
+  STTRAM Write Before Migration                 |    1457583
+  STTRAM Write After Migration                  |       5337
+  living SRAM Blocks Evicted                    |     988283
+  dead SRAM Blocks Evicted                      |    2205891
+  single Migration Count                        |      37277
+  double Migration Count                        |          1
+  no Migration Count                            |    5587662
+  g STTr Write                                  |    3364328
+  g STTr Reads                                  |    5408191
+  g Sram Write                                  |    4911873
+  g Sram Reads                                  |      80712
+  a SRAM                                        |          1
+  b SRAM                                        |          1
+  c SRAM                                        |          1
+  d SRAM                                        |    1698625
+  e SRAM                                        |          1
+  f SRAM                                        |      13476
+  g SRAM                                        |     949320
+  a STTR                                        |          1
+  b STTR                                        |          1
+  c STTR                                        |          1
+  d STTR                                        |     571791
+  e STTR                                        |          1
+  f STTR                                        |      97180
+  g STTR                                        |       4008
+  force Migration SramToSTTram                  |     371586
+  force Migration STTramToSram                  |      51208
+Branch predictor stats                          |           
+  num correct                                   |    3486555
+  num incorrect                                 |         91
+  misprediction rate                            |      0.00%
+  mpki                                          |       0.00
+TLB Summary                                     |           
+  I-TLB                                         |           
+    num accesses                                |   24119551
+    num misses                                  |         16
+    miss rate                                   |      0.00%
+    mpki                                        |       0.00
+  D-TLB                                         |           
+    num accesses                                |  108869499
+    num misses                                  |     656918
+    miss rate                                   |      0.60%
+    mpki                                        |       2.63
+  L2 TLB                                        |           
+    num accesses                                |     656934
+    num misses                                  |     655613
+    miss rate                                   |     99.80%
+    mpki                                        |       2.62
+Cache Summary                                   |           
+  Cache L1-I                                    |           
+    num cache accesses                          |   24119551
+    num cache misses                            |      31107
+    miss rate                                   |      0.13%
+    mpki                                        |       0.12
+  Cache L1-D                                    |           
+    num cache accesses                          |  108869499
+    num cache misses                            |    6377703
+    miss rate                                   |      5.86%
+    mpki                                        |      25.51
+  Cache L2                                      |           
+    num cache accesses                          |    7448497
+    num cache misses                            |    6408810
+    miss rate                                   |     86.04%
+    mpki                                        |      25.64
+  Cache L3                                      |           
+    num cache accesses                          |    7448497
+    num cache misses                            |    5756011
+    miss rate                                   |     77.28%
+    mpki                                        |      23.02
+DRAM summary                                    |           
+  num dram accesses                             |    7456955
+  average dram access latency (ns)              |   14374.73
+  average dram queueing delay                   |   14321.30
+  average dram bandwidth utilization            |     43.00%
+Coherency Traffic                               |           
+  num loads from dram                           |    5046375
+  num loads from dram cache                     |          0
+  num loads from remote cache                   |          0

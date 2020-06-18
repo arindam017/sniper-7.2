@@ -36,6 +36,7 @@ def xtract_para(ipdir,filename, num_apps):
     miss=re.findall('num cache misses[\s]+[|]+[\s\d]+[|]+[\s\d]+',tmp)  #extract num miss
     miss_r=re.findall('miss rate[\s]+[|]+[\s\d".%"]+[|]+[\s\d".%"]+',tmp)   #extract num miss
     mpki=re.findall('mpki[\s]+[|]+[\s\d"."]+[|]+[\s\d"."]+',tmp) #extract mpki
+
   else:
     tmp_ins=re.findall('Instructions[\s]+[|]+[\s]+[\d]+[\s|\d]+',str)  
     ins=re.findall('[\d]+',tmp_ins[0])
@@ -261,6 +262,16 @@ def xtract_para(ipdir,filename, num_apps):
 
 
 
+    tmp_force_Migration_SramToSTTram  =re.findall('force Migration SramToSTTram  [\s]+[|]+[\s]+[\d]+[\s|\d]+',str)     
+    force_Migration_SramToSTTram  =re.findall('[\d]+',tmp_force_Migration_SramToSTTram[0])      
+    paras.append(float(force_Migration_SramToSTTram[0]))    #48
+    
+    tmp_force_Migration_STTramToSram  =re.findall('force Migration STTramToSram  [\s]+[|]+[\s]+[\d]+[\s|\d]+',str)     
+    force_Migration_STTramToSram  =re.findall('[\d]+',tmp_force_Migration_STTramToSram[0])      
+    paras.append(float(force_Migration_STTramToSram[0]))    #49
+
+
+
 
 
 
@@ -326,6 +337,9 @@ def main():
   cumm_wgt_mpki = 0
 
   cumm_wgt_miss = 0
+  cumm_wgt_miss_r = 0
+
+
   cumm_wgt_wrti = 0
   cumm_wgt_wrte = 0
   cumm_wgt_rwte = 0
@@ -378,6 +392,9 @@ def main():
   cumm_wgt_e_STTR   = 0
   cumm_wgt_f_STTR   = 0
   cumm_wgt_g_STTR   = 0
+
+  cumm_wgt_force_Migration_SramToSTTram   = 0
+  cumm_wgt_force_Migration_STTramToSram   = 0
   
 
   print "results directory: "+ip_dir
@@ -385,7 +402,7 @@ def main():
   if num_apps == '2':
     fop.write("app1\tmpki\tmisr\tcpi\t\tdeadB\t\tinsB\t\tapp2\tmpki\tmisr\tcpi\t\tdeadB\t\tinsB\tinvB\n")
   else:  
-    fop.write("app1, CPI, IPC, l3_access, l3_miss, l3_miss_r, l3_mpki, wgt, ribc, wibc, dbc, wrte, rwte, Read_Intense_Blocks_M, Write_Intense_Blocks_M, Read_Intense_Blocks_MDuringMigrate, Write_Intense_Blocks_MDuringMigrate, M_Count, Migrate_During_Write_Count, Valid_Block_Evicted, SRAM_Read_Before_Migration, SRAM_Read_After_Migration, SRAM_Write_Before_Migration, SRAM_Write_After_Migration, STTRAM_Read_Before_Migration, STTRAM_Read_After_Migration, STTRAM_Write_Before_Migration, STTRAM_Write_After_Migration, living_SRAM_Blocks_Evicted, dead_SRAM_Blocks_Evicted, single_Migration_Count, double_Migration_Count, no_Migration_Count, g_STTr_Write, g_STTr_Reads, g_Sram_Write, g_Sram_Reads, a_SRAM, b_SRAM, c_SRAM, d_SRAM, e_SRAM, f_SRAM, g_SRAM, a_STTR, b_STTR, c_STTR, d_STTR, e_STTR, f_STTR, g_STTR\n")
+    fop.write("app1, CPI, IPC, l3_access, l3_miss, l3_miss_r, l3_mpki, wgt, ribc, wibc, dbc, wrte, rwte, Read_Intense_Blocks_M, Write_Intense_Blocks_M, Read_Intense_Blocks_MDuringMigrate, Write_Intense_Blocks_MDuringMigrate, M_Count, Migrate_During_Write_Count, Valid_Block_Evicted, SRAM_Read_Before_Migration, SRAM_Read_After_Migration, SRAM_Write_Before_Migration, SRAM_Write_After_Migration, STTRAM_Read_Before_Migration, STTRAM_Read_After_Migration, STTRAM_Write_Before_Migration, STTRAM_Write_After_Migration, living_SRAM_Blocks_Evicted, dead_SRAM_Blocks_Evicted, single_Migration_Count, double_Migration_Count, no_Migration_Count, g_STTr_Write, g_STTr_Reads, g_Sram_Write, g_Sram_Reads, a_SRAM, b_SRAM, c_SRAM, d_SRAM, e_SRAM, f_SRAM, g_SRAM, a_STTR, b_STTR, c_STTR, d_STTR, e_STTR, f_STTR, g_STTR, force_Migration_SramToSTTram, force_Migration_STTramToSram\n")
   
 
   for files in os.listdir(ip_dir):    # iterates over all files
@@ -570,21 +587,29 @@ def main():
 
 
 
+      force_Migration_SramToSTTram  =  paras[48]           
+      print force_Migration_SramToSTTram
+      
+      force_Migration_STTramToSram  =  paras[49]           
+      print force_Migration_STTramToSram
+
+
+
       ##################################
       ##################################
 
 
 
-      access = paras[48]
+      access = paras[50]
       print access
 
-      miss = paras[49]
+      miss = paras[51]
       print miss
 
-      miss_r = paras[50]
+      miss_r = paras[52]
       print miss_r
 
-      mpki = paras[51]
+      mpki = paras[53]
       print mpki
 
 
@@ -612,6 +637,12 @@ def main():
       print "Weighted l3 miss = "+str(wgt_miss)
       cumm_wgt_miss += wgt_miss
       print "Cummulative Weighted l3 miss = "+str(cumm_wgt_miss)
+
+      wgt_miss_r = miss_r*wgt
+      print "Weighted l3 miss rate = "+str(wgt_miss_r)
+      cumm_wgt_miss_r += wgt_miss_r
+      print "Cummulative Weighted l3 miss rate = "+str(cumm_wgt_miss_r)
+
 
 
       wgt_wrte = wrte*wgt
@@ -872,7 +903,20 @@ def main():
       wgt_g_STTR = wgt*g_STTR      
       print "Weighted g STTR   = "+str(wgt_g_STTR)    
       cumm_wgt_g_STTR  += wgt_g_STTR       
-      print "Cummulative Weighted g STTR   = "+str(cumm_wgt_g_STTR)      
+      print "Cummulative Weighted g STTR   = "+str(cumm_wgt_g_STTR)  
+
+
+
+
+      wgt_force_Migration_SramToSTTram = wgt*force_Migration_SramToSTTram      
+      print "Weighted force Migration SramToSTTram   = "+str(wgt_force_Migration_SramToSTTram)    
+      cumm_wgt_force_Migration_SramToSTTram  += wgt_force_Migration_SramToSTTram       
+      print "Cummulative Weighted force Migration SramToSTTram   = "+str(cumm_wgt_force_Migration_SramToSTTram) 
+      
+      wgt_force_Migration_STTramToSram = wgt*force_Migration_STTramToSram      
+      print "Weighted force Migration STTramToSram   = "+str(wgt_force_Migration_STTramToSram)    
+      cumm_wgt_force_Migration_STTramToSram  += wgt_force_Migration_STTramToSram       
+      print "Cummulative Weighted force Migration STTramToSram   = "+str(cumm_wgt_force_Migration_STTramToSram)     
 
 
               
@@ -901,7 +945,7 @@ def main():
       print "CPI: "+format((float(paras[2])/float(paras[1])),'.2f')
       print "IPC: "+format((float(paras[1])/float(paras[2])),'.2f')
       
-      fop.write(files+","+str(cpi)+","+str(ipc)+","+str(access)+","+str(miss)+","+str(miss_r)+","+str(mpki)+","+str(wgt)+","+str(ribc)+","+str(wibc)+","+str(dbc)+","+str(wrte)+","+str(rwte)+","+str(Read_Intense_Blocks_M)+","+str(Write_Intense_Blocks_M)+","+str(Read_Intense_Blocks_MDuringMigrate)+","+str(Write_Intense_Blocks_MDuringMigrate)+","+str(M_Count)+","+str(Migrate_During_Write_Count)+","+str(Valid_Block_Evicted)+","+str(SRAM_Read_Before_Migration)+","+str(SRAM_Read_After_Migration)+","+str(SRAM_Write_Before_Migration)+","+str(SRAM_Write_After_Migration)+","+str(STTRAM_Read_Before_Migration)+","+str(STTRAM_Read_After_Migration)+","+str(STTRAM_Write_Before_Migration)+","+str(STTRAM_Write_After_Migration)+","+str(living_SRAM_Blocks_Evicted)+","+str(dead_SRAM_Blocks_Evicted)+","+str(single_Migration_Count)+","+str(double_Migration_Count)+","+str(no_Migration_Count)+","+str(g_STTr_Write)+","+str(g_STTr_Reads)+","+str(g_Sram_Write)+","+str(g_Sram_Reads)+","+str(a_SRAM)+","+str(b_SRAM)+","+str(c_SRAM)+","+str(d_SRAM)+","+str(e_SRAM)+","+str(f_SRAM)+","+str(g_SRAM)+","+str(a_STTR)+","+str(b_STTR)+","+str(c_STTR)+","+str(d_STTR)+","+str(e_STTR)+","+str(f_STTR)+","+str(g_STTR)+"\n")
+      fop.write(files+","+str(cpi)+","+str(ipc)+","+str(access)+","+str(miss)+","+str(miss_r)+","+str(mpki)+","+str(wgt)+","+str(ribc)+","+str(wibc)+","+str(dbc)+","+str(wrte)+","+str(rwte)+","+str(Read_Intense_Blocks_M)+","+str(Write_Intense_Blocks_M)+","+str(Read_Intense_Blocks_MDuringMigrate)+","+str(Write_Intense_Blocks_MDuringMigrate)+","+str(M_Count)+","+str(Migrate_During_Write_Count)+","+str(Valid_Block_Evicted)+","+str(SRAM_Read_Before_Migration)+","+str(SRAM_Read_After_Migration)+","+str(SRAM_Write_Before_Migration)+","+str(SRAM_Write_After_Migration)+","+str(STTRAM_Read_Before_Migration)+","+str(STTRAM_Read_After_Migration)+","+str(STTRAM_Write_Before_Migration)+","+str(STTRAM_Write_After_Migration)+","+str(living_SRAM_Blocks_Evicted)+","+str(dead_SRAM_Blocks_Evicted)+","+str(single_Migration_Count)+","+str(double_Migration_Count)+","+str(no_Migration_Count)+","+str(g_STTr_Write)+","+str(g_STTr_Reads)+","+str(g_Sram_Write)+","+str(g_Sram_Reads)+","+str(a_SRAM)+","+str(b_SRAM)+","+str(c_SRAM)+","+str(d_SRAM)+","+str(e_SRAM)+","+str(f_SRAM)+","+str(g_SRAM)+","+str(a_STTR)+","+str(b_STTR)+","+str(c_STTR)+","+str(d_STTR)+","+str(e_STTR)+","+str(f_STTR)+","+str(g_STTR)+","+str(force_Migration_SramToSTTram)+","+str(force_Migration_STTramToSram)+"\n")
      
       
       print "================================"
@@ -916,6 +960,11 @@ def main():
   #Arindam
   Weighted_l3miss = cumm_wgt_miss/cumm_wgt
   Weighted_l3miss = format(Weighted_l3miss, '.0f')
+
+  Weighted_l3miss_r = cumm_wgt_miss_r/cumm_wgt
+  Weighted_l3miss_r = format(Weighted_l3miss_r, '.0f')
+
+
   
   Weighted_wrte = cumm_wgt_wrte/cumm_wgt
   Weighted_wrte = format(Weighted_wrte, '.0f')
@@ -1060,6 +1109,14 @@ def main():
 
 
 
+  Weighted_force_Migration_SramToSTTram = cumm_wgt_force_Migration_SramToSTTram/cumm_wgt        
+  Weighted_force_Migration_SramToSTTram = format(Weighted_force_Migration_SramToSTTram, '.0f')
+  
+  Weighted_force_Migration_STTramToSram = cumm_wgt_force_Migration_STTramToSram/cumm_wgt        
+  Weighted_force_Migration_STTramToSram = format(Weighted_force_Migration_STTramToSram, '.0f')
+
+
+
 
   ####################################################
   ####################################################
@@ -1075,9 +1132,9 @@ def main():
 
   fop.write("\n\n")
   #normalizing mpki by dividing it with weight
-  fop.write("Benchmark, Weighted IPC, Weighted L3 Miss, Weighted ribc, Weighted wibc, Weighted dbc, Weighted wrte, Weighted rwte, Weighted Read Intense Blocks M, Weighted Write Intense Blocks M, Weighted Read Intense Blocks MDuringMigrate, Weighted Write Intense Blocks MDuringMigrate, Weighted M Count, Weighted Migrate During Write Count, Weighted Valid Blocks Evicted, Weighted SRAM Read Before Migration, Weighted SRAM Read After Migration, Weighted SRAM Write Before Migration, Weighted SRAM Write After Migration, Weighted STTRAM Read Before Migration, Weighted STTRAM Read After Migration, Weighted STTRAM Write Before Migration, Weighted STTRAM Write After Migration, living SRAM Blocks Evicted, dead SRAM Blocks Evicted, single Migration Count, double Migration Count, no Migration Count, Weighted g STTr Write, Weighted g STTr Reads, Weighted g Sram Write, Weighted g Sram Reads, Weighted a SRAM, Weighted b SRAM, Weighted c SRAM, Weighted d SRAM, Weighted e SRAM, Weighted f SRAM, Weighted g SRAM, Weighted a STTR, Weighted b STTR, Weighted c STTR, Weighted d STTR, Weighted e STTR, Weighted f STTR, Weighted g STTR\n")
+  fop.write("Benchmark, Weighted IPC, Weighted L3 Miss, L3 Miss r, Weighted ribc, Weighted wibc, Weighted dbc, Weighted wrte, Weighted rwte, Weighted Read Intense Blocks M, Weighted Write Intense Blocks M, Weighted Read Intense Blocks MDuringMigrate, Weighted Write Intense Blocks MDuringMigrate, Weighted M Count, Weighted Migrate During Write Count, Weighted Valid Blocks Evicted, Weighted SRAM Read Before Migration, Weighted SRAM Read After Migration, Weighted SRAM Write Before Migration, Weighted SRAM Write After Migration, Weighted STTRAM Read Before Migration, Weighted STTRAM Read After Migration, Weighted STTRAM Write Before Migration, Weighted STTRAM Write After Migration, living SRAM Blocks Evicted, dead SRAM Blocks Evicted, single Migration Count, double Migration Count, no Migration Count, Weighted g STTr Write, Weighted g STTr Reads, Weighted g Sram Write, Weighted g Sram Reads, Weighted a SRAM, Weighted b SRAM, Weighted c SRAM, Weighted d SRAM, Weighted e SRAM, Weighted f SRAM, Weighted g SRAM, Weighted a STTR, Weighted b STTR, Weighted c STTR, Weighted d STTR, Weighted e STTR, Weighted f STTR, Weighted g STTR, Weighted force Migration SramToSTTram, Weighted force Migration STTramToSram\n")
   #fop.write(application+","+str(Weighted_cpi)+","+str(Weighted_ipc)+","+Weighted_mpki+"\n")
-  fop.write(application+","+str(Weighted_ipc)+","+str(Weighted_l3miss)+","+str(Weighted_ribc)+","+str(Weighted_wibc)+","+str(Weighted_dbc)+","+str(Weighted_wrte)+","+str(Weighted_rwte)+","+str(Weighted_Read_Intense_Blocks_M)+","+str(Weighted_Write_Intense_Blocks_M)+","+str(Weighted_Read_Intense_Blocks_MDuringMigrate)+","+str(Weighted_Write_Intense_Blocks_MDuringMigrate)+","+str(Weighted_M_Count)+","+str(Weighted_Migrate_During_Write_Count)+","+str(Weighted_Valid_Block_Evicted)+","+str(Weighted_SRAM_Read_Before_Migration)+","+str(Weighted_SRAM_Read_After_Migration)+","+str(Weighted_SRAM_Write_Before_Migration)+","+str(Weighted_SRAM_Write_After_Migration)+","+str(Weighted_STTRAM_Read_Before_Migration)+","+str(Weighted_STTRAM_Read_After_Migration)+","+str(Weighted_STTRAM_Write_Before_Migration)+","+str(Weighted_STTRAM_Write_After_Migration)+","+str(Weighted_living_SRAM_Blocks_Evicted)+","+str(Weighted_dead_SRAM_Blocks_Evicted)+","+str(Weighted_single_Migration_Count)+","+str(Weighted_double_Migration_Count)+","+str(Weighted_no_Migration_Count)+","+str(Weighted_g_STTr_Write)+","+str(Weighted_g_STTr_Reads)+","+str(Weighted_g_Sram_Write)+","+str(Weighted_g_Sram_Reads)+","+str(Weighted_a_SRAM)+","+str(Weighted_b_SRAM)+","+str(Weighted_c_SRAM)+","+str(Weighted_d_SRAM)+","+str(Weighted_e_SRAM)+","+str(Weighted_f_SRAM)+","+str(Weighted_g_SRAM)+","+str(Weighted_a_STTR)+","+str(Weighted_b_STTR)+","+str(Weighted_c_STTR)+","+str(Weighted_d_STTR)+","+str(Weighted_e_STTR)+","+str(Weighted_f_STTR)+","+str(Weighted_g_STTR)+"\n")
+  fop.write(application+","+str(Weighted_ipc)+","+str(Weighted_l3miss)+","+str(Weighted_l3miss_r)+","+str(Weighted_ribc)+","+str(Weighted_wibc)+","+str(Weighted_dbc)+","+str(Weighted_wrte)+","+str(Weighted_rwte)+","+str(Weighted_Read_Intense_Blocks_M)+","+str(Weighted_Write_Intense_Blocks_M)+","+str(Weighted_Read_Intense_Blocks_MDuringMigrate)+","+str(Weighted_Write_Intense_Blocks_MDuringMigrate)+","+str(Weighted_M_Count)+","+str(Weighted_Migrate_During_Write_Count)+","+str(Weighted_Valid_Block_Evicted)+","+str(Weighted_SRAM_Read_Before_Migration)+","+str(Weighted_SRAM_Read_After_Migration)+","+str(Weighted_SRAM_Write_Before_Migration)+","+str(Weighted_SRAM_Write_After_Migration)+","+str(Weighted_STTRAM_Read_Before_Migration)+","+str(Weighted_STTRAM_Read_After_Migration)+","+str(Weighted_STTRAM_Write_Before_Migration)+","+str(Weighted_STTRAM_Write_After_Migration)+","+str(Weighted_living_SRAM_Blocks_Evicted)+","+str(Weighted_dead_SRAM_Blocks_Evicted)+","+str(Weighted_single_Migration_Count)+","+str(Weighted_double_Migration_Count)+","+str(Weighted_no_Migration_Count)+","+str(Weighted_g_STTr_Write)+","+str(Weighted_g_STTr_Reads)+","+str(Weighted_g_Sram_Write)+","+str(Weighted_g_Sram_Reads)+","+str(Weighted_a_SRAM)+","+str(Weighted_b_SRAM)+","+str(Weighted_c_SRAM)+","+str(Weighted_d_SRAM)+","+str(Weighted_e_SRAM)+","+str(Weighted_f_SRAM)+","+str(Weighted_g_SRAM)+","+str(Weighted_a_STTR)+","+str(Weighted_b_STTR)+","+str(Weighted_c_STTR)+","+str(Weighted_d_STTR)+","+str(Weighted_e_STTR)+","+str(Weighted_f_STTR)+","+str(Weighted_g_STTR)+","+str(Weighted_force_Migration_SramToSTTram)+","+str(Weighted_force_Migration_STTramToSram)+"\n")
 
   ts = time.time()
   st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')

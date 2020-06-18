@@ -197,6 +197,8 @@ static UInt64 g1                    = 0;
 static UInt64 validSRAMEvictions                    = 0;
 static UInt64 validSTTREvictions                    = 0;
 
+static UInt64 forceMigrationSramToSTTram     = 0;
+static UInt64 forceMigrationSTTramToSram     = 0;
 
 
 
@@ -373,6 +375,9 @@ CacheSetPHC::CacheSetPHC(
       registerStatsMetric("interval_timer", 0 , "e_STTR",        &e1  );
       registerStatsMetric("interval_timer", 0 , "f_STTR",        &f1  );
       registerStatsMetric("interval_timer", 0 , "g_STTR",        &g1  ); 
+
+      registerStatsMetric("interval_timer", 0 , "force_Migration_SramToSTTram",        &forceMigrationSramToSTTram  ); 
+      registerStatsMetric("interval_timer", 0 , "force_Migration_STTramToSram",        &forceMigrationSTTramToSram  ); 
       
 
    }
@@ -1427,828 +1432,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    }
 
 
-   else if ((set_index % sampler_fraction)==3)  //sampler set for Wcntplus
-   {
-      Wcntplus++;
-      //finding out invalid blocks
-      if (m_state_plus[eip_truncated]<state_threshold)   //TI cold. victim from STTRAM
-      {
-         for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-         {
-            if (!m_cache_block_info_array[i]->isValid())
-            {
-               m_TI[i]=eip_truncated;
-               m_cost[i]=128;
-               write_array[i] = 0;  //reset the counters on eviction
-               read_array[i] = 0;
-               access_counter[i] = 0;
-               m_deadblock[i] = 0;
-
-               m_read_before_m1[i]  = 0;
-               m_write_before_m1[i] = 0;  
-               m_read_after_m1[i]   = 0; 
-               m_write_after_m1[i]  = 0; 
-               m1_flag[i]           = 0; 
-
-               m_read_before_mduringwrite[i]  = 0;
-               m_write_before_mduringwrite[i] = 0;  
-               m_read_after_mduringwrite[i]   = 0; 
-               m_write_after_mduringwrite[i]  = 0; 
-               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
-
-               moveToMRU(i);
-               return i;
-
-            }
-         }
-      }
-
-      else  //TI hot. Victim from SRAM
-      {
-         for(UInt32 i = 0; i < SRAM_ways; i++)
-         {
-            if (!m_cache_block_info_array[i]->isValid())
-            {
-               m_TI[i]=eip_truncated;
-               m_cost[i]=128;
-               write_array[i] = 0;  //reset the counters on eviction
-               read_array[i] = 0;
-               access_counter[i] = 0;
-               m_deadblock[i] = 0;
-
-               m_read_before_m1[i]  = 0;
-               m_write_before_m1[i] = 0;  
-               m_read_after_m1[i]   = 0; 
-               m_write_after_m1[i]  = 0; 
-               m1_flag[i]           = 0; 
-
-               m_read_before_mduringwrite[i]  = 0;
-               m_write_before_mduringwrite[i] = 0;  
-               m_read_after_mduringwrite[i]   = 0; 
-               m_write_after_mduringwrite[i]  = 0; 
-               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
-
-               moveToMRU(i);
-               return i;
-            }
-         }
-      }
-      //trying to find an invalid block if it is present but not in the proper partition
-      for (UInt32 i = 0; i < m_associativity; i++)
-      {
-         if (!m_cache_block_info_array[i]->isValid())
-         { 
-            m_TI[i]=eip_truncated;
-            m_cost[i]=128;
-            write_array[i] = 0;  //reset the counters on eviction
-            read_array[i] = 0;
-            access_counter[i] = 0;
-            m_deadblock[i] = 0;
-
-            m_read_before_m1[i]  = 0;
-            m_write_before_m1[i] = 0;  
-            m_read_after_m1[i]   = 0; 
-            m_write_after_m1[i]  = 0; 
-            m1_flag[i]           = 0; 
-
-            m_read_before_mduringwrite[i]  = 0;
-            m_write_before_mduringwrite[i] = 0;  
-            m_read_after_mduringwrite[i]   = 0; 
-            m_write_after_mduringwrite[i]  = 0; 
-            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
-               
-            moveToMRU(i);
-            return i;
-         }
-      }
-
-      //INVALID BLOCK NOT FOUND
-      
-      for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
-      {
-         UInt32 index = 0;
-         UInt8 max_bits = 0;
-
-         if(m_state_plus[eip_truncated]<state_threshold) //TI cold
-         {
-            for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-            {
-               if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-               {
-                  index = i;
-                  max_bits = m_lru_bits[i];
-               }
-            }
-         }
-         else ////TI is hot
-         {
-            for (UInt32 i = 0; i < SRAM_ways; i++)
-            {
-               if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-               {
-                  index = i;
-                  max_bits = m_lru_bits[i];
-               }
-            }
-            //call function (migrate(index)) here
-            migrate(index);
-         }
-
-         LOG_ASSERT_ERROR(index < m_associativity, "Error Finding LRU bits");
-
-         if((m_cost[index]>Kplus) && (m_state_plus[m_TI[index]]<state_max)) //state should be incremented
-            m_state_plus[m_TI[index]]++;
-         else if((m_cost[index]<Kplus) && (m_state_plus[m_TI[index]]>0))
-            m_state_plus[m_TI[index]]--;
-
-
-         //Calculating Cmax and Cmin
-         if(m_cost[index]<Cmin)
-            Cmin = m_cost[index];
-         if(m_cost[index]>Cmax)
-            Cmax = m_cost[index];
-
-
-         //Calculating  Wplusmax and Wplusmin
-         if(m_wcnt[m_TI[index]]<Wplusmin)
-            Wplusmin = m_wcnt[m_TI[index]];
-         if(m_wcnt[m_TI[index]]>Wplusmax)
-            Wplusmax = m_wcnt[m_TI[index]];
-
-
-
-         if(m_dcnt[m_TI[index]] != 255)
-            m_dcnt[m_TI[index]]++;  //increment deadblock counter on eviction
-
-         if(m_wcnt[m_TI[index]] != 0)
-            m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
-
-         if((index<SRAM_ways) && (index>=0))
-         {
-            if(m_dcnt[m_TI[index]]<dcnt_threshold)
-               livingSRAMBlocksEvicted++;
-            else
-               deadSRAMBlocksEvicted++;
-
-         }
-
-         if((m1_flag[index]==1) && (mduringwrite_flag[index]==1))
-            doubleMigrationCount++;
-         else if ((m1_flag[index]==0) && (mduringwrite_flag[index]==0))
-            noMigrationCount++;
-         else
-            singleMigrationCount++;
-
-         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-         UInt64 percentageReadBeforeM1             =  0;
-         UInt64 percentageWriteBeforeM1            =  0;
-
-         UInt64 percentageReadBeforeMDuringWrite   =  0;
-         UInt64 percentageWriteBeforeMDuringWrite  =  0;
-
-         
-         if (m_read_before_m1[index]!=0)
-            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
-         if (m_write_before_m1[index]!=0)
-            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
-
-         if (m_read_before_mduringwrite[index]!=0)
-            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
-         if (m_write_before_mduringwrite[index]!=0)
-            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
-
-         
-         ///////////////////[READ-M1]////////////////////////
-         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
-         {
-            blocksReadBeforeM1020++;
-            blocksReadAfterM180100++;
-         }
-
-         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
-         {
-            blocksReadBeforeM12040++;
-            blocksReadAfterM16080++;
-         }
-
-         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
-         {
-            blocksReadBeforeM14060++;
-            blocksReadAfterM14060++;
-         }
-
-         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
-         {
-            blocksReadBeforeM16080++;
-            blocksReadAfterM12040++;
-         }
-
-         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
-         {
-            blocksReadBeforeM180100++;
-            blocksReadAfterM1020++;
-         }
-
-         else
-         {
-
-         }
-
-
-         ///////////////////[READ-MDURINGWRITE]////////////////////////
-         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
-         {
-            blocksReadBeforeMDuringWrite020++;
-            blocksReadAfterMDuringWrite80100++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
-         {
-            blocksReadBeforeMDuringWrite2040++;
-            blocksReadAfterMDuringWrite6080++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
-         {
-            blocksReadBeforeMDuringWrite4060++;
-            blocksReadAfterMDuringWrite4060++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
-         {
-            blocksReadBeforeMDuringWrite6080++;
-            blocksReadAfterMDuringWrite2040++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
-         {
-            blocksReadBeforeMDuringWrite80100++;
-            blocksReadAfterMDuringWrite020++;
-         }
-
-         else
-         {
-            
-         }
-
-
-         ///////////////////[WRITE-M1]////////////////////////
-
-         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
-         {
-            blocksWriteBeforeM1020++;
-            blocksWriteAfterM180100++;
-         }
-
-         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
-         {
-            blocksWriteBeforeM12040++;
-            blocksWriteAfterM16080++;
-         }
-
-         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
-         {
-            blocksWriteBeforeM14060++;
-            blocksWriteAfterM14060++;
-         }
-
-         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
-         {
-            blocksWriteBeforeM16080++;
-            blocksWriteAfterM12040++;
-         }
-
-         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
-         {
-            blocksWriteBeforeM180100++;
-            blocksWriteAfterM1020++;
-         }
-
-         else
-         {
-
-         }
-
-
-         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
-         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
-         {
-            blocksWriteBeforeMDuringWrite020++;
-            blocksWriteAfterMDuringWrite80100++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
-         {
-            blocksWriteBeforeMDuringWrite2040++;
-            blocksWriteAfterMDuringWrite6080++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
-         {
-            blocksWriteBeforeMDuringWrite4060++;
-            blocksWriteAfterMDuringWrite4060++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
-         {
-            blocksWriteBeforeMDuringWrite6080++;
-            blocksWriteAfterMDuringWrite2040++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
-         {
-            blocksWriteBeforeMDuringWrite80100++;
-            blocksWriteAfterMDuringWrite020++;
-         }
-
-         else
-         {
-            
-         }
-
-         if (m1_flag[index]==1)
-         {
-            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
-            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
-               readIntenseBlocksM1++;
-
-            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
-            else
-               writeIntenseBlocksM1++;
-         }
-         
-         if (mduringwrite_flag[index]==1)
-         {
-            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
-            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
-               readIntenseBlocksMDuringWrite++;
-
-            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
-            else
-               writeIntenseBlocksMDuringWrite++;
-         }
-         
-         
-
-         
-
-
-
-
-         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-         m_TI[index]=eip_truncated;
-         m_cost[index]=128; 
-
-         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
-            writeToReadTransitionsAtEviction++;
-         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
-            readToWriteTransitionsAtEviction++;  
-
-         histogram[access_counter[index]]++;
-         access_counter[index] = 0;
-
-         write_array[index] = 0;  //reset the counters on eviction
-         read_array[index] = 0;
-         m_deadblock[index] = 0;
-
-         m_read_before_m1[index]  = 0;
-         m_write_before_m1[index] = 0;  
-         m_read_after_m1[index]   = 0; 
-         m_write_after_m1[index]  = 0; 
-         m1_flag[index]           = 0; 
-
-         m_read_before_mduringwrite[index]  = 0;
-         m_write_before_mduringwrite[index] = 0;  
-         m_read_after_mduringwrite[index]   = 0; 
-         m_write_after_mduringwrite[index]  = 0; 
-         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1
-
-         validBlockEvicted++;
-
-         moveToMRU(index);
-         m_set_info->incrementAttempt(attempt); 
-
-         return index;
-
-      }
-
-
-   }
-
-   else if ((set_index % sampler_fraction)==4)  //Sampler set using Wcntminus
-   {
-      Wcntminus++;
-      //finding out invalid blocks
-      if (m_state_plus[eip_truncated]<state_threshold)   //TI cold. victim from STTRAM
-      {
-         for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-         {
-            if (!m_cache_block_info_array[i]->isValid())
-            {
-               m_TI[i]=eip_truncated;
-               m_cost[i]=128;
-               write_array[i] = 0;  //reset the counters on eviction
-               read_array[i] = 0;
-               access_counter[i] = 0;
-               m_deadblock[i] = 0;
-
-               m_read_before_m1[i]  = 0;
-               m_write_before_m1[i] = 0;  
-               m_read_after_m1[i]   = 0; 
-               m_write_after_m1[i]  = 0; 
-               m1_flag[i]           = 0; 
-
-               m_read_before_mduringwrite[i]  = 0;
-               m_write_before_mduringwrite[i] = 0;  
-               m_read_after_mduringwrite[i]   = 0; 
-               m_write_after_mduringwrite[i]  = 0; 
-               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
-
-               moveToMRU(i);
-               return i;
-
-            }
-         }
-      }
-
-      else  //TI hot. Victim from SRAM
-      {
-         for(UInt32 i = 0; i < SRAM_ways; i++)
-         {
-            if (!m_cache_block_info_array[i]->isValid())
-            {
-               m_TI[i]=eip_truncated;
-               m_cost[i]=128;
-               write_array[i] = 0;  //reset the counters on eviction
-               read_array[i] = 0;
-               access_counter[i] = 0;
-               m_deadblock[i] = 0;
-
-               m_read_before_m1[i]  = 0;
-               m_write_before_m1[i] = 0;  
-               m_read_after_m1[i]   = 0; 
-               m_write_after_m1[i]  = 0; 
-               m1_flag[i]           = 0;
-
-               m_read_before_mduringwrite[i]  = 0;
-               m_write_before_mduringwrite[i] = 0;  
-               m_read_after_mduringwrite[i]   = 0; 
-               m_write_after_mduringwrite[i]  = 0; 
-               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1 
-
-               moveToMRU(i);
-               return i;
-            }
-         }
-      }
-      //trying to find an invalid block if it is present but not in the proper partition
-      for (UInt32 i = 0; i < m_associativity; i++)
-      {
-         if (!m_cache_block_info_array[i]->isValid())
-         { 
-            m_TI[i]=eip_truncated;
-            m_cost[i]=128;
-            write_array[i] = 0;  //reset the counters on eviction
-            read_array[i] = 0;
-            access_counter[i] = 0;
-            m_deadblock[i] = 0;
-
-            m_read_before_m1[i]  = 0;
-            m_write_before_m1[i] = 0;  
-            m_read_after_m1[i]   = 0; 
-            m_write_after_m1[i]  = 0; 
-            m1_flag[i]           = 0; 
-
-            m_read_before_mduringwrite[i]  = 0;
-            m_write_before_mduringwrite[i] = 0;  
-            m_read_after_mduringwrite[i]   = 0; 
-            m_write_after_mduringwrite[i]  = 0; 
-            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
-               
-            moveToMRU(i);
-            return i;
-         }
-      }
-
-      //INVALID BLOCK NOT FOUND
-      
-      for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
-      {
-         UInt32 index = 0;
-         UInt8 max_bits = 0;
-
-         if(m_state_plus[eip_truncated]<state_threshold) //TI cold
-         {
-            for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-            {
-               if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-               {
-                  index = i;
-                  max_bits = m_lru_bits[i];
-               }
-            }
-            
-         }
-         else //TI is hot
-         {
-            for (UInt32 i = 0; i < SRAM_ways; i++)
-            {
-               if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-               {
-                  index = i;
-                  max_bits = m_lru_bits[i];
-               }
-            }
-            //call function (migrate(index)) here
-            migrate(index);
-         }
-
-         LOG_ASSERT_ERROR(index < m_associativity, "Error Finding LRU bits");
-
-         if((m_cost[index]>Kplus) && (m_state_plus[m_TI[index]]<state_max)) //state should be incremented
-            m_state_plus[m_TI[index]]++;
-         else if((m_cost[index]<Kplus) && (m_state_plus[m_TI[index]]>0))
-            m_state_plus[m_TI[index]]--;
-
-      
-         //Calculating Cmax and Cmin
-         if(m_cost[index]<Cmin)
-            Cmin = m_cost[index];
-         if(m_cost[index]>Cmax)
-            Cmax = m_cost[index];
-
-
-         //Calculating  Wminusmax and Wminusmin
-         if(m_wcnt[m_TI[index]]<Wminusmin)
-            Wminusmin = m_wcnt[m_TI[index]];
-         if(m_wcnt[m_TI[index]]>Wminusmax)
-            Wminusmax = m_wcnt[m_TI[index]];
-
-
-
-         if(m_dcnt[m_TI[index]] != 255)
-            m_dcnt[m_TI[index]]++;  //increment deadblock counter on eviction
-
-         if(m_wcnt[m_TI[index]] != 0)
-            m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
-
-         if((index<SRAM_ways) && (index>=0))
-         {
-            if(m_dcnt[m_TI[index]]<dcnt_threshold)
-               livingSRAMBlocksEvicted++;
-            else
-               deadSRAMBlocksEvicted++;
-
-         }
-
-         if((m1_flag[index]==1) && (mduringwrite_flag[index]==1))
-            doubleMigrationCount++;
-         else if ((m1_flag[index]==0) && (mduringwrite_flag[index]==0))
-            noMigrationCount++;
-         else
-            singleMigrationCount++;
-
-         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-         UInt64 percentageReadBeforeM1             =  0;
-         UInt64 percentageWriteBeforeM1            =  0;
-
-         UInt64 percentageReadBeforeMDuringWrite   =  0;
-         UInt64 percentageWriteBeforeMDuringWrite  =  0;
-
-         
-         if (m_read_before_m1[index]!=0)
-            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
-         if (m_write_before_m1[index]!=0)
-            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
-
-         if (m_read_before_mduringwrite[index]!=0)
-            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
-         if (m_write_before_mduringwrite[index]!=0)
-            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
-
-         
-         ///////////////////[READ-M1]////////////////////////
-         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
-         {
-            blocksReadBeforeM1020++;
-            blocksReadAfterM180100++;
-         }
-
-         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
-         {
-            blocksReadBeforeM12040++;
-            blocksReadAfterM16080++;
-         }
-
-         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
-         {
-            blocksReadBeforeM14060++;
-            blocksReadAfterM14060++;
-         }
-
-         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
-         {
-            blocksReadBeforeM16080++;
-            blocksReadAfterM12040++;
-         }
-
-         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
-         {
-            blocksReadBeforeM180100++;
-            blocksReadAfterM1020++;
-         }
-
-         else
-         {
-
-         }
-
-
-         ///////////////////[READ-MDURINGWRITE]////////////////////////
-         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
-         {
-            blocksReadBeforeMDuringWrite020++;
-            blocksReadAfterMDuringWrite80100++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
-         {
-            blocksReadBeforeMDuringWrite2040++;
-            blocksReadAfterMDuringWrite6080++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
-         {
-            blocksReadBeforeMDuringWrite4060++;
-            blocksReadAfterMDuringWrite4060++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
-         {
-            blocksReadBeforeMDuringWrite6080++;
-            blocksReadAfterMDuringWrite2040++;
-         }
-
-         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
-         {
-            blocksReadBeforeMDuringWrite80100++;
-            blocksReadAfterMDuringWrite020++;
-         }
-
-         else
-         {
-            
-         }
-
-
-         ///////////////////[WRITE-M1]////////////////////////
-
-         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
-         {
-            blocksWriteBeforeM1020++;
-            blocksWriteAfterM180100++;
-         }
-
-         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
-         {
-            blocksWriteBeforeM12040++;
-            blocksWriteAfterM16080++;
-         }
-
-         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
-         {
-            blocksWriteBeforeM14060++;
-            blocksWriteAfterM14060++;
-         }
-
-         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
-         {
-            blocksWriteBeforeM16080++;
-            blocksWriteAfterM12040++;
-         }
-
-         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
-         {
-            blocksWriteBeforeM180100++;
-            blocksWriteAfterM1020++;
-         }
-
-         else
-         {
-
-         }
-
-
-         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
-         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
-         {
-            blocksWriteBeforeMDuringWrite020++;
-            blocksWriteAfterMDuringWrite80100++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
-         {
-            blocksWriteBeforeMDuringWrite2040++;
-            blocksWriteAfterMDuringWrite6080++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
-         {
-            blocksWriteBeforeMDuringWrite4060++;
-            blocksWriteAfterMDuringWrite4060++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
-         {
-            blocksWriteBeforeMDuringWrite6080++;
-            blocksWriteAfterMDuringWrite2040++;
-         }
-
-         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
-         {
-            blocksWriteBeforeMDuringWrite80100++;
-            blocksWriteAfterMDuringWrite020++;
-         }
-
-         else
-         {
-            
-         }
-
-         if (m1_flag[index]==1)
-         {
-            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
-            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
-               readIntenseBlocksM1++;
-
-            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
-            else
-               writeIntenseBlocksM1++;
-         }
-         
-         if (mduringwrite_flag[index]==1)
-         {
-            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
-            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
-               readIntenseBlocksMDuringWrite++;
-
-            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
-            else
-               writeIntenseBlocksMDuringWrite++;
-         }
-         
-         
-
-         
-
-         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-         m_TI[index]=eip_truncated;
-         m_cost[index]=128; 
-
-         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
-            writeToReadTransitionsAtEviction++;
-         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
-            readToWriteTransitionsAtEviction++;  
-
-         histogram[access_counter[index]]++;
-         access_counter[index] = 0;
-
-         write_array[index] = 0;  //reset the counters on eviction
-         read_array[index] = 0;
-         m_deadblock[index] = 0;
-
-         m_read_before_m1[index]  = 0;
-         m_write_before_m1[index] = 0;  
-         m_read_after_m1[index]   = 0; 
-         m_write_after_m1[index]  = 0; 
-         m1_flag[index]           = 0; 
-
-         m_read_before_mduringwrite[index]  = 0;
-         m_write_before_mduringwrite[index] = 0;  
-         m_read_after_mduringwrite[index]   = 0; 
-         m_write_after_mduringwrite[index]  = 0; 
-         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1
-
-         validBlockEvicted++;
-
-         moveToMRU(index);
-         m_set_info->incrementAttempt(attempt); 
-
-         return index;
-
-      }
-
-   }
-
-
    else //non-sampler set, uses phc
    {  
       //printf("non-sampler\n");
@@ -2359,24 +1542,84 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          }
       }
       
+
+
       //INVALID BLOCK NOT FOUND
       validBlockEvicted++;
       // Make m_num_attemps attempts at evicting the block at LRU position
-      for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt)
+      for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt) //returns index
       {
+
+
          UInt32 index = 0;
          UInt8 max_bits = 0;
 
-         //printf("invalid block not found\n");
+         UInt32 forceMigrationIndex;
 
          if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
          {
-            for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+            
+            bool checkFlag2 = false;
+            UInt8 max_dcnt2 = 0;
+
+            index = SRAM_ways; 
+
+            for (UInt32 i = SRAM_ways; i < m_associativity; i++)  //checking for  deadblock in STTRAM
             {
-               if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+               if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i)) && (isValidReplacement(i)))
                {
                   index = i;
-                  max_bits = m_lru_bits[i];
+                  max_dcnt2 = m_dcnt[m_TI[i]];
+                  checkFlag2 = true;
+               }
+            }
+
+            if(!checkFlag2)   //No valid deadblock found in STTRAM. Search for deadblock in SRAM
+            {
+
+               forceMigrationIndex = 0;
+               bool checkFlag3 = false;
+
+               for (UInt32 i = 0; i < SRAM_ways; i++)
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i)) && (isValidReplacement(i)))
+                  {
+                     forceMigrationIndex = i;
+                     max_dcnt2 = m_dcnt[m_TI[i]];
+                     checkFlag3 = true;
+                  }
+               }
+
+               if(checkFlag3) //valid deadblock found in SRAM. find out a victim from STTRAM. swap it with forceMigrationIndex from SRAM
+               {
+
+                  index =  SRAM_ways;
+                  //find out a victim from STTRAM
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+
+                  //swap it with forceMigrationIndex from SRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSTTramToSram++;
+               }
+               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               {
+                  index = SRAM_ways;
+
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
                }
             }
             
@@ -2384,15 +1627,77 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    
          else  //TI is hot. select victim from SRAM
          {   
-            for (UInt32 i = 0; i < SRAM_ways; i++)
+            
+            ///////////////////////////////////////////////////////////////////////////////////////////
+
+            bool checkFlag=false;
+            UInt8 max_dcnt = 0;
+
+            for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
             {
-               if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+               if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i)) && (isValidReplacement(i)))
                {
                   index = i;
-                  max_bits = m_lru_bits[i];
+                  max_dcnt = m_dcnt[m_TI[i]];
+                  checkFlag = true;
                }
             }
-            migrate(index);
+
+            if(!checkFlag) //valid deadblock not found in SRAM. Search for a deadblock in STTRAM 
+            {
+
+               forceMigrationIndex = SRAM_ways; 
+               bool checkFlag1=false; 
+
+               for (UInt32 i = SRAM_ways; i < m_associativity; i++) //checking for deadblock in  STTRAM partition
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i)) && (isValidReplacement(i)))
+                  {  
+                     forceMigrationIndex = i;
+                     max_dcnt = m_dcnt[m_TI[i]];
+                     checkFlag1 = true;
+                  }
+               }
+
+               if(checkFlag1)   //valid deadblock found in STTRAM. find out a victim from SRAM. swap it with forceMigrationIndex block from STTRAM
+               {
+
+                  index = 0;
+
+                  //find out a victim from SRAM
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+
+                  //swap it with forceMigrationIndex block from STTRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSramToSTTram++;
+               }
+               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               {
+
+                  index = 0;
+
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+               }
+
+               /////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+            }
          }
 
 
@@ -3191,7 +2496,7 @@ void
 CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
 {
    
-   /*
+   
    UInt32 stt_index = -1;
    UInt8 local_max_bits = 0;
    CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
@@ -3314,7 +2619,7 @@ CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
 
    }
    
-   */
+   
    
 }
 
@@ -3550,6 +2855,94 @@ CacheSetPHC::migrate_during_write(UInt32 stt_index, UInt16 eip_truncated)    //c
    */
    
    
+}
+
+void
+CacheSetPHC::swapTwoBlocks(UInt32 sram_index, UInt32 stt_index)
+{
+   CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
+
+   UInt8 temp_lru_bits = 0;
+   UInt8 temp_lru_bits_unified = 0;
+   UInt16 temp_TI = 0;
+   UInt8 temp_cost = 0;
+   UInt16 temp_write_array = 0;
+   UInt16 temp_read_array = 0;
+   UInt16 temp_access_counter = 0;
+   UInt8 temp_deadblock = 0;
+
+   UInt64 temp_m_read_before_m1  = 0;
+   UInt64 temp_m_write_before_m1 = 0;  
+   UInt64 temp_m_read_after_m1   = 0; 
+   UInt64 temp_m_write_after_m1  = 0; 
+   UInt64 temp_m1_flag           = 0;  
+
+   UInt64 temp_m_read_before_mduringwrite    = 0;
+   UInt64 temp_m_write_before_mduringwrite   = 0;  
+   UInt64 temp_m_read_after_mduringwrite     = 0; 
+   UInt64 temp_m_write_after_mduringwrite    = 0; 
+   UInt64 temp_mduringwrite_flag             = 0;  
+
+   temp_cache_block_info->clone(m_cache_block_info_array[stt_index]);
+   m_cache_block_info_array[stt_index]->clone(m_cache_block_info_array[sram_index]);
+   m_cache_block_info_array[sram_index]->clone(temp_cache_block_info);
+   /////////////////////////////////////////////////////////////////////
+   temp_lru_bits           = m_lru_bits[sram_index];
+   temp_lru_bits_unified   = m_lru_bits_unified[sram_index];
+   temp_TI                 = m_TI[sram_index]; 
+   temp_cost               = m_cost[sram_index]; 
+   temp_write_array        = write_array[sram_index];
+   temp_read_array         = read_array[sram_index];
+   temp_access_counter     = access_counter[sram_index];
+   temp_deadblock          = m_deadblock[sram_index];
+   temp_m_read_before_m1            =  m_read_before_m1[sram_index];
+   temp_m_write_before_m1           =  m_write_before_m1[sram_index]; 
+   temp_m_read_after_m1             =  m_read_after_m1[sram_index];
+   temp_m_write_after_m1            =  m_write_after_m1[sram_index];
+   temp_m1_flag                     =  m1_flag[sram_index];
+   temp_m_read_before_mduringwrite  =  m_read_before_mduringwrite[sram_index];
+   temp_m_write_before_mduringwrite =  m_write_before_mduringwrite[sram_index];
+   temp_m_read_after_mduringwrite   =  m_read_after_mduringwrite[sram_index];
+   temp_m_write_after_mduringwrite  =  m_write_after_mduringwrite[sram_index];
+   temp_mduringwrite_flag           =  mduringwrite_flag[sram_index];
+   /////////////////////////////////////////////////////////////////////
+   m_lru_bits[sram_index]                    = m_lru_bits[stt_index];
+   m_lru_bits_unified[sram_index]            = m_lru_bits_unified[stt_index];
+   m_TI[sram_index]                          = m_TI[stt_index]; 
+   m_cost[sram_index]                        = m_cost[stt_index]; 
+   write_array[sram_index]                   = write_array[stt_index];
+   read_array[sram_index]                    = read_array[stt_index];
+   access_counter[sram_index]                = access_counter[stt_index];
+   m_deadblock[sram_index]                   = m_deadblock[stt_index];
+   m_read_before_m1[sram_index]              =  m_read_before_m1[stt_index];
+   m_write_before_m1[sram_index]             =  m_write_before_m1[stt_index];
+   m_read_after_m1[sram_index]               =  m_read_after_m1[stt_index];
+   m_write_after_m1[sram_index]              =  m_write_after_m1[stt_index];
+   m1_flag[sram_index]                       =  m1_flag[stt_index];
+   m_read_before_mduringwrite[sram_index]    =  m_read_before_mduringwrite[stt_index];
+   m_write_before_mduringwrite[sram_index]   =  m_write_before_mduringwrite[stt_index];
+   m_read_after_mduringwrite[sram_index]     =  m_read_after_mduringwrite[stt_index];
+   m_write_after_mduringwrite[sram_index]    =  m_write_after_mduringwrite[stt_index];
+   mduringwrite_flag[sram_index]             =  mduringwrite_flag[stt_index];
+   /////////////////////////////////////////////////////////////////////
+   m_lru_bits[stt_index]                  = temp_lru_bits;
+   m_lru_bits_unified[stt_index]          = temp_lru_bits_unified;
+   m_TI[stt_index]                        = temp_TI; 
+   m_cost[stt_index]                      = temp_cost; 
+   write_array[stt_index]                 = temp_write_array;
+   read_array[stt_index]                  = temp_read_array;
+   access_counter[stt_index]              = temp_access_counter;
+   m_deadblock[stt_index]                 = temp_deadblock;
+   m_read_before_m1[stt_index]            = temp_m_read_before_m1;                       
+   m_write_before_m1[stt_index]           = temp_m_write_before_m1;          
+   m_read_after_m1[stt_index]             = temp_m_read_after_m1;            
+   m_write_after_m1[stt_index]            = temp_m_write_after_m1;           
+   m1_flag[stt_index]                     = temp_m1_flag;                    
+   m_read_before_mduringwrite[stt_index]  = temp_m_read_before_mduringwrite; 
+   m_write_before_mduringwrite[stt_index] = temp_m_write_before_mduringwrite;
+   m_read_after_mduringwrite[stt_index]   = temp_m_read_after_mduringwrite;  
+   m_write_after_mduringwrite[stt_index]  = temp_m_write_after_mduringwrite; 
+   mduringwrite_flag[stt_index]           = temp_mduringwrite_flag;  
 }
 
 

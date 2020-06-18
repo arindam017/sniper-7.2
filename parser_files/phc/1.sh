@@ -1,4 +1,4 @@
 
 #./csv_generator.py /home/arindam/Desktop/Sniper/sniper-7.2/expt_results/without_writeback/LRU_120_8
-./csv_generator.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_2/expt_results/phc_para23_2
+./csv_generator.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_3/expt_results/phc_para23_3
 

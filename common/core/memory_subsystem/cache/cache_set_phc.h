@@ -71,6 +71,7 @@ class CacheSetPHC : public CacheSet
       void migrate(UInt32 sram_index);
       void migrate2(UInt32 stt_index);
       void migrate_during_write(UInt32 stt_index, UInt16 eip_truncated);
+      void swapTwoBlocks(UInt32 sram_index, UInt32 stt_index);
 };
 
 #endif /* CACHE_SET_LRU_H */
