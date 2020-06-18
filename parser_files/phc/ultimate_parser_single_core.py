@@ -297,8 +297,8 @@ def xtract_para(ipdir,filename, num_apps):
     mpki   = re.findall('mpki[[\s]+[|]+[\s\d"."]+',tmp) #extract mpki
     mpki   = mpki[0].split('|')[1].strip()
 
-    paras.append(float(access))
-    paras.append(float(miss))
+    paras.append(int(access))
+    paras.append(int(miss))
     paras.append(float(miss_r))
     paras.append(float(mpki))
     print paras
