@@ -278,6 +278,32 @@ def xtract_para(ipdir,filename, num_apps):
 
     
     ########
+    caches = ["L1-D", "L2", "L3"]
+    str1 = 'Cache '
+    str2 = '[\s]+[|]+[\s]+[\n]+[\s]+[\w\s\d|\.\%]+'
+    for cache in caches:
+        string = str1 + cache + str2
+
+        tmp=re.findall(string,str) # extract parameters of the L3
+        tmp=tmp[0]
+        print 'Newton' + cache
+        print tmp
+        access = re.findall('num cache accesses[\s]+[|]+[\s\d]+',tmp) #extract num accesses
+        access = access[0].split('|')[1].strip()
+        miss   = re.findall('num cache misses[\s]+[|]+[\s\d]+',tmp)  #extract num miss
+        miss   = miss[0].split('|')[1].strip()
+        miss_r = re.findall('miss rate[\s]+[|]+[\s\d".%"]+',tmp)   #extract num miss
+        miss_r = miss_r[0].split('|')[1].strip()
+        miss_r = miss_r.split('%')[0].strip()
+        mpki   = re.findall('mpki[[\s]+[|]+[\s\d"."]+',tmp) #extract mpki
+        mpki   = mpki[0].split('|')[1].strip()
+
+        paras.append(int(access))
+        paras.append(int(miss))
+        paras.append(float(miss_r))
+        paras.append(float(mpki))
+        print paras
+    print 'done'
 
     tmp=re.findall('Cache L3[\s]+[|]+[\s]+[\n]+[\s]+[\w\s\d|\.\%]+',str) 
     tmp=tmp[0].split('\n')
@@ -335,7 +361,7 @@ def main():
   num_apps=args[1];
 
   #weight_dir='/home/newton/research/tools/sniper/sniper-6.0/traces/250M'
-  weight_dir='/home/arindam/Desktop/Sniper/sniper-7.2/benchmark_weights'
+  weight_dir='/home/newton/newton/research/code/sniper_arindam/sniper-7.2/benchmark_weights'
   op_dir=os.path.join(ip_dir,'para_extracted')
   cmd="mkdir "+op_dir
   os.system(cmd)
