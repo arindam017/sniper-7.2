@@ -40,7 +40,11 @@ UInt8 Wminusmin = 128;
 
 static UInt16 Mplus = 0;               //counters. Same as M0, M+ and M- in paper
 static UInt16 Mminus = 0;
+
 static UInt16 M0 = 0;
+static UInt16 MSamplerSetDcntMin = 0;
+static UInt16 MSamplerSetDcntPlu = 0;
+
 
 static UInt16 Wcntplus = 0;
 static UInt16 Wcntminus = 0;
@@ -60,7 +64,6 @@ UInt8 Wminus = 147;
 
 
 ///////// required for static cost change////////////////
-
 UInt8 cost_threshold = 148;
 UInt8 cost_threshold_plus = 149;
 UInt8 cost_threshold_minus = 147;
@@ -85,8 +88,15 @@ static UInt8 m_state_plus[256] = {0};        //state table used by sampler set 1
 static UInt8 m_state_minus[256] = {0};       //state table used by sampler set 2
 
 static UInt8 m_dcnt[256] = {0};              //deadblock predictor table
-static UInt8 dcnt_threshold = 128;           //deadblock predictor table threshold
-static UInt8 dcnt_initialization = 0;        //this variable is used to make sure dcnt is initialized only once 
+static UInt8 dcnt_initialization = 0;        //this variable is used to make sure dcnt is initialized only once
+
+//////////////////dynamis deadblock threshold////////////////////////////////////////
+static UInt8 dcnt_threshold = 192;                //deadblock predictor table threshold 
+static UInt8 dcnt_threshold_plu = 194;           //deadblock predictor table threshold 
+static UInt8 dcnt_threshold_min = 190;           //deadblock predictor table threshold 
+//////////////////////////////////////////////////////////////////////////////////////
+
+static bool changeToHighHistoryFlag = true;
 
 static UInt8 m_wcnt[256] = {0};              //Write burst predictor
 
@@ -199,6 +209,11 @@ static UInt64 validSTTREvictions                    = 0;
 
 static UInt64 forceMigrationSramToSTTram     = 0;
 static UInt64 forceMigrationSTTramToSram     = 0;
+
+static UInt64 SRAM_reads_hits    = 0;
+static UInt64 SRAM_write_hits    = 0;
+static UInt64 STTR_reads_hits    = 0;
+static UInt64 STTR_write_hits    = 0;
 
 
 
@@ -378,6 +393,11 @@ CacheSetPHC::CacheSetPHC(
 
       registerStatsMetric("interval_timer", 0 , "force_Migration_SramToSTTram",        &forceMigrationSramToSTTram  ); 
       registerStatsMetric("interval_timer", 0 , "force_Migration_STTramToSram",        &forceMigrationSTTramToSram  ); 
+
+      registerStatsMetric("interval_timer", 0 , "SRAM_reads_hits",        &SRAM_reads_hits  ); 
+      registerStatsMetric("interval_timer", 0 , "SRAM_write_hits",        &SRAM_write_hits  ); 
+      registerStatsMetric("interval_timer", 0 , "STTR_reads_hits",        &STTR_reads_hits  ); 
+      registerStatsMetric("interval_timer", 0 , "STTR_write_hits",        &STTR_write_hits  ); 
       
 
    }
@@ -402,6 +422,8 @@ UInt32
 CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index)   //implements dynamic threshold;both sampler and non sampler has cost;overhead is high; DYNAMIC COST CHANGE
 {
    totalCacheMissCounter++;
+
+   //printf("K is %d\n", K);
 
    if (totalCacheMissCounter == totalCacheMissCounter_saturation) //phase change
    {
@@ -534,6 +556,74 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          Wminus = WminusK;
          Wplus = WplusK;
       }
+
+
+      //////////////////// deadblock threshold adjustment//////////////////////////
+
+      //printf("MSamplerSetDcntMin is %d, MSamplerSetDcntPlu is %d and M0 is %d\n", MSamplerSetDcntMin, MSamplerSetDcntPlu, M0);
+
+      if (MSamplerSetDcntMin < MSamplerSetDcntPlu)
+      {
+         if(MSamplerSetDcntMin <= M0)
+         {
+            if (dcnt_threshold_min > 1)   //Decrease T0
+            {
+               dcnt_threshold = dcnt_threshold_min;
+               dcnt_threshold_min = dcnt_threshold - 2;
+               dcnt_threshold_plu = dcnt_threshold + 2;
+
+               changeToHighHistoryFlag = false;
+            } 
+         }
+      }
+      else if (MSamplerSetDcntMin > MSamplerSetDcntPlu)
+      {
+         if (MSamplerSetDcntPlu <= M0)
+         {
+            if (dcnt_threshold_plu < 254) //Increase T0
+            {
+               dcnt_threshold = dcnt_threshold_plu;
+               dcnt_threshold_min = dcnt_threshold - 2;
+               dcnt_threshold_plu = dcnt_threshold + 2;
+
+               changeToHighHistoryFlag = true;
+            }
+         }
+      }
+      else
+      {
+         if(MSamplerSetDcntMin <= M0)  //ChangeToHigh/ChangeTOLow: Coin Toss
+         {
+            if(changeToHighHistoryFlag)
+            {
+               if (dcnt_threshold_plu < 254)
+               {
+                  dcnt_threshold = dcnt_threshold_plu;
+                  dcnt_threshold_min = dcnt_threshold - 2;
+                  dcnt_threshold_plu = dcnt_threshold + 2;
+
+                  changeToHighHistoryFlag = true;
+               }
+
+            }
+            else
+            {
+               if (dcnt_threshold_min > 1)   //Decrease T0
+               {
+                  dcnt_threshold = dcnt_threshold_min;
+                  dcnt_threshold_min = dcnt_threshold - 2;
+                  dcnt_threshold_plu = dcnt_threshold + 2;
+   
+                  changeToHighHistoryFlag = false;
+               }
+
+            }
+            
+         }
+      }
+
+
+      /////////////////////////////////////////////////////////////////////////////
       
 
       //reinitialization
@@ -541,7 +631,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
       Mplus = 0;
       Mminus = 0;
+
       M0 = 0;
+      MSamplerSetDcntMin = 0;
+      MSamplerSetDcntPlu = 0;
+
 
       Wcntplus = 0;
       Wcntminus = 0;
@@ -1432,6 +1526,1484 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
    }
 
 
+   else if ((set_index % sampler_fraction)==3)  //MSamplerSetDcntMin++;
+   {
+      MSamplerSetDcntMin++;
+      //printf("MSamplerSetDcntMin is %d\n", MSamplerSetDcntMin);
+
+      //finding out invalid blocks
+      if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
+      { 
+         for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+         {
+            if (!m_cache_block_info_array[i]->isValid())
+            {
+               m_TI[i]=eip_truncated;
+               m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               access_counter[i] = 0;
+               m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+               
+               moveToMRU(i);
+               //printf("invalid block found in sttram\n");
+               return i;
+            }
+      
+         }
+      }
+   
+      else  //TI is hot. select victim from SRAM
+      {
+         for (UInt32 i = 0; i < SRAM_ways; i++)
+         {
+            if (!m_cache_block_info_array[i]->isValid())
+            { 
+               m_TI[i]=eip_truncated;
+               m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               access_counter[i] = 0;
+               m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+               
+               moveToMRU(i);
+               //printf("invalid block found in sram\n");
+               return i;
+            }
+         }
+      }
+      
+      //trying to find an invalid block if it is present but not in the proper partition
+      for (UInt32 i = 0; i < m_associativity; i++)
+      {
+         if (!m_cache_block_info_array[i]->isValid())
+         { 
+            m_TI[i]=eip_truncated;
+            m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+            
+            write_array[i] = 0;  //reset the counters on eviction
+            read_array[i] = 0;
+            access_counter[i] = 0;
+            m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+               
+            moveToMRU(i);
+            //printf("invalid block found, but not in proper partition\n");
+            return i;
+         }
+      }
+      
+
+
+      //INVALID BLOCK NOT FOUND
+      validBlockEvicted++;
+      // Make m_num_attemps attempts at evicting the block at LRU position
+      for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt) //returns index
+      {
+
+
+         UInt32 index = 0;
+         UInt8 max_bits = 0;
+
+         UInt32 forceMigrationIndex;
+
+         if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
+         {
+            
+            bool checkFlag2 = false;
+            UInt8 max_dcnt2 = 0;
+
+            index = SRAM_ways; 
+
+            for (UInt32 i = SRAM_ways; i < m_associativity; i++)  //checking for  deadblock in STTRAM
+            {
+               if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+               {
+                  index = i;
+                  max_dcnt2 = m_dcnt[m_TI[i]];
+                  checkFlag2 = true;
+               }
+            }
+
+            if(!checkFlag2)   //No valid deadblock found in STTRAM. Search for deadblock in SRAM
+            {
+
+               forceMigrationIndex = 0;
+               bool checkFlag3 = false;
+
+               for (UInt32 i = 0; i < SRAM_ways; i++)
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+                  {
+                     forceMigrationIndex = i;
+                     max_dcnt2 = m_dcnt[m_TI[i]];
+                     checkFlag3 = true;
+                  }
+               }
+
+               if(checkFlag3) //valid deadblock found in SRAM. find out a victim from STTRAM. swap it with forceMigrationIndex from SRAM
+               {
+
+                  index =  SRAM_ways;
+                  //find out a victim from STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
+
+                  //Most LRU block in STTRAM
+                  /*
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+                  */
+                  
+                  //Most write intensive block in STTRAM
+                  UInt8 maxState = 0;
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        maxState = m_state[m_TI[i]];
+                     }
+                  }
+                  
+                  //swap it with forceMigrationIndex from SRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSTTramToSram++;
+               }
+               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               {
+                  
+                  ///////////////////////////////
+                  index = SRAM_ways;
+
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }               
+                  ///////////////////////////////
+
+               }
+            }
+            
+         }
+   
+         else  //TI is hot. select victim from SRAM
+         {   
+            
+            ///////////////////////////////////////////////////////////////////////////////////////////
+
+            bool checkFlag=false;
+            UInt8 max_dcnt = 0;
+
+            for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
+            {
+               if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+               {
+                  index = i;
+                  max_dcnt = m_dcnt[m_TI[i]];
+                  checkFlag = true;
+               }
+            }
+
+            if(!checkFlag) //valid deadblock not found in SRAM. Search for a deadblock in STTRAM 
+            {
+
+               forceMigrationIndex = SRAM_ways; 
+               bool checkFlag1=false; 
+
+               for (UInt32 i = SRAM_ways; i < m_associativity; i++) //checking for deadblock in  STTRAM partition
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+                  {  
+                     forceMigrationIndex = i;
+                     max_dcnt = m_dcnt[m_TI[i]];
+                     checkFlag1 = true;
+                  }
+               }
+
+               if(checkFlag1)   //valid deadblock found in STTRAM. find out a victim from SRAM. swap it with forceMigrationIndex block from STTRAM
+               {
+
+                  index = 0;
+
+                  //find out a victim from SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
+
+                  //Most LRU block in SRAM
+                  /*
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+                  */
+                  
+                  //Most Read Intense Block in SRAM
+                  UInt8 minState = 255;
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        minState = m_state[m_TI[i]];
+                     }
+                  }
+                  
+
+                  //swap it with forceMigrationIndex block from STTRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSramToSTTram++;
+               }
+               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               {
+                  index = 0;
+
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }               
+
+               }
+
+               /////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+            }
+         }
+
+
+         LOG_ASSERT_ERROR(index < m_associativity, "Error Finding LRU bits");
+
+
+         
+         //////////////////////////////////////////////////////////////////
+
+         bool deadblockInSRAMFlag=false;
+         bool deadblockInSTTRFlag=false;
+
+         bool deadBlockInBothPartition=false;
+         bool deadBlockInNeitherPartition=false;
+         bool deadBlockInSRAMOnly=false;
+         bool deadBlockInSTTROnly=false;
+
+
+
+         //checking deadblock///
+         for(UInt32 iter=0; iter<SRAM_ways; iter++)
+         {
+            if(isDeadBlock(iter, set_index))
+               deadblockInSRAMFlag=true;
+
+         }
+         for(UInt32 iter=SRAM_ways; iter<m_associativity; iter++)
+         {
+            if(isDeadBlock(iter, set_index))
+               deadblockInSTTRFlag=true;
+            
+         }
+ 
+         if ((deadblockInSRAMFlag) && (deadblockInSTTRFlag))
+            deadBlockInBothPartition=true;
+         else if ((!deadblockInSRAMFlag) && (!deadblockInSTTRFlag))
+            deadBlockInNeitherPartition=true;
+         else if ((deadblockInSRAMFlag) && (!deadblockInSTTRFlag))
+            deadBlockInSRAMOnly=true;
+         else if ((!deadblockInSRAMFlag) && (deadblockInSTTRFlag))
+            deadBlockInSTTROnly=true;
+         
+
+         if ((index>=0) && (index<SRAM_ways))
+         {
+            validSRAMEvictions++;
+
+            if(deadBlockInBothPartition)
+            {
+
+               if(isDeadBlock(index, set_index))
+                  d0++;
+               else
+                  e0++;
+                           
+            }
+            else if(deadBlockInNeitherPartition)
+            {
+               UInt32 indexLocal = 0;
+               UInt8 max_bits_local = 0;
+
+               for (UInt32 iter2 = 0; iter2 < m_associativity; iter2++)
+               {
+                  //if (m_lru_bits_unified[iter2] > max_bits_local) && (isValidReplacement(iter2))
+                  if ((m_lru_bits_unified[iter2] > max_bits_local) && (isValidReplacement(iter2)))
+                  {
+                     indexLocal = iter2;
+                     max_bits_local = m_lru_bits_unified[iter2];
+                  }
+               }
+
+               if((indexLocal>=SRAM_ways) && (indexLocal<m_associativity))
+                  g0++;
+               else 
+                  f0++;
+
+            }
+            else if(deadBlockInSRAMOnly)
+            {
+               if(deadBlockInBothPartition)
+               {
+                  if(isDeadBlock(index, set_index))
+                     b0++;
+                  else
+                     c0++;
+               }
+
+            }
+            else if(deadBlockInSTTROnly)
+            {
+               a0++;
+            }
+
+         }
+
+
+
+         else if((index>=SRAM_ways) && (index<m_associativity))
+         {
+            validSTTREvictions++;
+
+            if(deadBlockInBothPartition)
+            {
+               if(isDeadBlock(index, set_index))
+                  d1++;
+               else
+                  e1++;
+            }
+            else if(deadBlockInNeitherPartition)
+            {
+
+               UInt32 indexLocal = 0;
+               UInt8 max_bits_local = 0;
+
+               for (UInt32 iter2 = 0; iter2 < m_associativity; iter2++)
+               {
+                  //if (m_lru_bits_unified[iter2] > max_bits_local && isValidReplacement(iter2))
+                  if ((m_lru_bits_unified[iter2] > max_bits_local) && (isValidReplacement(iter2)))
+                  {
+                     indexLocal = iter2;
+                     max_bits_local = m_lru_bits_unified[iter2];
+                  }
+               }
+
+               if((indexLocal>=0) && (indexLocal<SRAM_ways))
+                  g1++;
+               else 
+                  f1++;
+            }
+            else if(deadBlockInSRAMOnly)
+            {
+               a1++;
+            }
+            else if(deadBlockInSTTROnly)
+            {
+               if(deadBlockInBothPartition)
+               {
+                  if(isDeadBlock(index, set_index))
+                     b1++;
+                  else
+                     c1++;
+               }
+            }
+         }
+
+         //////////////////////////////////////////////////////////////////////////////////
+
+         
+
+   
+            
+         if((m_cost[index]>K) && (m_state[m_TI[index]]<state_max)) //state should be incremented
+            m_state[m_TI[index]]++;
+         else if((m_cost[index]<K) && (m_state[m_TI[index]]>0))
+            m_state[m_TI[index]]--;         
+         
+         //check if the victim block is read intense, or write intense or deadblock
+
+         if(m_dcnt[m_TI[index]]>=dcnt_threshold)   //deadblock
+            deadblock_counter++;
+         else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]<K))  //read_intense
+            read_intense_block_counter++;
+         else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]>=K))  //write_intense
+            write_intense_block_counter++;
+         else
+            printf("ERROR!!!!!!\n");
+
+
+         //Calculating Cmax and Cmin
+         if(m_cost[index]<Cmin)
+            Cmin = m_cost[index];
+         if(m_cost[index]>Cmax)
+            Cmax = m_cost[index];
+
+
+
+         //Calculating Wmax and Wmin
+         if(m_wcnt[m_TI[index]]<Wmin)
+            Wmin = m_wcnt[m_TI[index]];
+         if(m_wcnt[m_TI[index]]>Wmax)
+            Wmax = m_wcnt[m_TI[index]];
+
+
+
+         if(m_dcnt[m_TI[index]] != 255)
+            m_dcnt[m_TI[index]]++;  //increment deadblock counter on eviction
+
+         if(m_wcnt[m_TI[index]] != 0)
+            m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
+
+         if((index<SRAM_ways) && (index>=0))
+         {
+            if(m_dcnt[m_TI[index]]<dcnt_threshold)
+               livingSRAMBlocksEvicted++;
+            else
+               deadSRAMBlocksEvicted++;
+
+         }
+
+         if((m1_flag[index]==1) && (mduringwrite_flag[index]==1))
+            doubleMigrationCount++;
+         else if ((m1_flag[index]==0) && (mduringwrite_flag[index]==0))
+            noMigrationCount++;
+         else
+            singleMigrationCount++;
+
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+         
+
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         
+         m_TI[index]=eip_truncated;
+         m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
+            writeToReadTransitionsAtEviction++;
+         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
+            readToWriteTransitionsAtEviction++;
+
+         histogram[access_counter[index]]++;
+         access_counter[index] = 0;
+
+         write_array[index] = 0;  //reset the counters on eviction
+         read_array[index] = 0;
+         m_deadblock[index] = 0;
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1     
+
+         validBlockEvicted++;
+
+         // Mark our newly-inserted line as most-recently used
+         moveToMRU(index);
+         m_set_info->incrementAttempt(attempt); 
+       
+
+         return index;
+         
+      } 
+   }
+
+
+   else if ((set_index % sampler_fraction)==4)  //MSamplerSetDcntPlu++;
+   {
+      MSamplerSetDcntPlu++;
+      //printf("MSamplerSetDcntPlu is %d\n", MSamplerSetDcntPlu);
+
+      //finding out invalid blocks
+      if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
+      { 
+         for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+         {
+            if (!m_cache_block_info_array[i]->isValid())
+            {
+               m_TI[i]=eip_truncated;
+               m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               access_counter[i] = 0;
+               m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+               
+               moveToMRU(i);
+               //printf("invalid block found in sttram\n");
+               return i;
+            }
+      
+         }
+      }
+   
+      else  //TI is hot. select victim from SRAM
+      {
+         for (UInt32 i = 0; i < SRAM_ways; i++)
+         {
+            if (!m_cache_block_info_array[i]->isValid())
+            { 
+               m_TI[i]=eip_truncated;
+               m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+               
+               write_array[i] = 0;  //reset the counters on eviction
+               read_array[i] = 0;
+               access_counter[i] = 0;
+               m_deadblock[i] = 0;
+
+               m_read_before_m1[i]  = 0;
+               m_write_before_m1[i] = 0;  
+               m_read_after_m1[i]   = 0; 
+               m_write_after_m1[i]  = 0; 
+               m1_flag[i]           = 0; 
+
+               m_read_before_mduringwrite[i]  = 0;
+               m_write_before_mduringwrite[i] = 0;  
+               m_read_after_mduringwrite[i]   = 0; 
+               m_write_after_mduringwrite[i]  = 0; 
+               mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+               
+               moveToMRU(i);
+               //printf("invalid block found in sram\n");
+               return i;
+            }
+         }
+      }
+      
+      //trying to find an invalid block if it is present but not in the proper partition
+      for (UInt32 i = 0; i < m_associativity; i++)
+      {
+         if (!m_cache_block_info_array[i]->isValid())
+         { 
+            m_TI[i]=eip_truncated;
+            m_cost[i]=128; //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+            
+            write_array[i] = 0;  //reset the counters on eviction
+            read_array[i] = 0;
+            access_counter[i] = 0;
+            m_deadblock[i] = 0;
+
+            m_read_before_m1[i]  = 0;
+            m_write_before_m1[i] = 0;  
+            m_read_after_m1[i]   = 0; 
+            m_write_after_m1[i]  = 0; 
+            m1_flag[i]           = 0; 
+
+            m_read_before_mduringwrite[i]  = 0;
+            m_write_before_mduringwrite[i] = 0;  
+            m_read_after_mduringwrite[i]   = 0; 
+            m_write_after_mduringwrite[i]  = 0; 
+            mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
+               
+            moveToMRU(i);
+            //printf("invalid block found, but not in proper partition\n");
+            return i;
+         }
+      }
+      
+
+
+      //INVALID BLOCK NOT FOUND
+      validBlockEvicted++;
+      // Make m_num_attemps attempts at evicting the block at LRU position
+      for(UInt8 attempt = 0; attempt < m_num_attempts; ++attempt) //returns index
+      {
+
+
+         UInt32 index = 0;
+         UInt8 max_bits = 0;
+
+         UInt32 forceMigrationIndex;
+
+         if(m_state[eip_truncated]<state_threshold)   //TI is cold. select victim from STTRAM
+         {
+            
+            bool checkFlag2 = false;
+            UInt8 max_dcnt2 = 0;
+
+            index = SRAM_ways; 
+
+            for (UInt32 i = SRAM_ways; i < m_associativity; i++)  //checking for  deadblock in STTRAM
+            {
+               if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+               {
+                  index = i;
+                  max_dcnt2 = m_dcnt[m_TI[i]];
+                  checkFlag2 = true;
+               }
+            }
+
+            if(!checkFlag2)   //No valid deadblock found in STTRAM. Search for deadblock in SRAM
+            {
+
+               forceMigrationIndex = 0;
+               bool checkFlag3 = false;
+
+               for (UInt32 i = 0; i < SRAM_ways; i++)
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+                  {
+                     forceMigrationIndex = i;
+                     max_dcnt2 = m_dcnt[m_TI[i]];
+                     checkFlag3 = true;
+                  }
+               }
+
+               if(checkFlag3) //valid deadblock found in SRAM. find out a victim from STTRAM. swap it with forceMigrationIndex from SRAM
+               {
+
+                  index =  SRAM_ways;
+                  //find out a victim from STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
+
+                  //Most LRU block in STTRAM
+                  /*
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+                  */
+                  
+                  //Most write intensive block in STTRAM
+                  UInt8 maxState = 0;
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        maxState = m_state[m_TI[i]];
+                     }
+                  }
+                  
+                  //swap it with forceMigrationIndex from SRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSTTramToSram++;
+               }
+               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               {
+                  
+                  ///////////////////////////////
+                  index = SRAM_ways;
+
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }               
+                  ///////////////////////////////
+
+               }
+            }
+            
+         }
+   
+         else  //TI is hot. select victim from SRAM
+         {   
+            
+            ///////////////////////////////////////////////////////////////////////////////////////////
+
+            bool checkFlag=false;
+            UInt8 max_dcnt = 0;
+
+            for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
+            {
+               if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+               {
+                  index = i;
+                  max_dcnt = m_dcnt[m_TI[i]];
+                  checkFlag = true;
+               }
+            }
+
+            if(!checkFlag) //valid deadblock not found in SRAM. Search for a deadblock in STTRAM 
+            {
+
+               forceMigrationIndex = SRAM_ways; 
+               bool checkFlag1=false; 
+
+               for (UInt32 i = SRAM_ways; i < m_associativity; i++) //checking for deadblock in  STTRAM partition
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+                  {  
+                     forceMigrationIndex = i;
+                     max_dcnt = m_dcnt[m_TI[i]];
+                     checkFlag1 = true;
+                  }
+               }
+
+               if(checkFlag1)   //valid deadblock found in STTRAM. find out a victim from SRAM. swap it with forceMigrationIndex block from STTRAM
+               {
+
+                  index = 0;
+
+                  //find out a victim from SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
+
+                  //Most LRU block in SRAM
+                  /*
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }
+                  */
+                  
+                  //Most Read Intense Block in SRAM
+                  UInt8 minState = 255;
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        minState = m_state[m_TI[i]];
+                     }
+                  }
+                  
+
+                  //swap it with forceMigrationIndex block from STTRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSramToSTTram++;
+               }
+               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               {
+                  index = 0;
+
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     {
+                        index = i;
+                        max_bits = m_lru_bits[i];
+                     }
+                  }               
+
+               }
+
+               /////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+            }
+         }
+
+
+         LOG_ASSERT_ERROR(index < m_associativity, "Error Finding LRU bits");
+
+
+         
+         //////////////////////////////////////////////////////////////////
+
+         bool deadblockInSRAMFlag=false;
+         bool deadblockInSTTRFlag=false;
+
+         bool deadBlockInBothPartition=false;
+         bool deadBlockInNeitherPartition=false;
+         bool deadBlockInSRAMOnly=false;
+         bool deadBlockInSTTROnly=false;
+
+
+
+         //checking deadblock///
+         for(UInt32 iter=0; iter<SRAM_ways; iter++)
+         {
+            if(isDeadBlock(iter, set_index))
+               deadblockInSRAMFlag=true;
+
+         }
+         for(UInt32 iter=SRAM_ways; iter<m_associativity; iter++)
+         {
+            if(isDeadBlock(iter, set_index))
+               deadblockInSTTRFlag=true;
+            
+         }
+ 
+         if ((deadblockInSRAMFlag) && (deadblockInSTTRFlag))
+            deadBlockInBothPartition=true;
+         else if ((!deadblockInSRAMFlag) && (!deadblockInSTTRFlag))
+            deadBlockInNeitherPartition=true;
+         else if ((deadblockInSRAMFlag) && (!deadblockInSTTRFlag))
+            deadBlockInSRAMOnly=true;
+         else if ((!deadblockInSRAMFlag) && (deadblockInSTTRFlag))
+            deadBlockInSTTROnly=true;
+         
+
+         if ((index>=0) && (index<SRAM_ways))
+         {
+            validSRAMEvictions++;
+
+            if(deadBlockInBothPartition)
+            {
+
+               if(isDeadBlock(index, set_index))
+                  d0++;
+               else
+                  e0++;
+                           
+            }
+            else if(deadBlockInNeitherPartition)
+            {
+               UInt32 indexLocal = 0;
+               UInt8 max_bits_local = 0;
+
+               for (UInt32 iter2 = 0; iter2 < m_associativity; iter2++)
+               {
+                  //if (m_lru_bits_unified[iter2] > max_bits_local) && (isValidReplacement(iter2))
+                  if ((m_lru_bits_unified[iter2] > max_bits_local) && (isValidReplacement(iter2)))
+                  {
+                     indexLocal = iter2;
+                     max_bits_local = m_lru_bits_unified[iter2];
+                  }
+               }
+
+               if((indexLocal>=SRAM_ways) && (indexLocal<m_associativity))
+                  g0++;
+               else 
+                  f0++;
+
+            }
+            else if(deadBlockInSRAMOnly)
+            {
+               if(deadBlockInBothPartition)
+               {
+                  if(isDeadBlock(index, set_index))
+                     b0++;
+                  else
+                     c0++;
+               }
+
+            }
+            else if(deadBlockInSTTROnly)
+            {
+               a0++;
+            }
+
+         }
+
+
+
+         else if((index>=SRAM_ways) && (index<m_associativity))
+         {
+            validSTTREvictions++;
+
+            if(deadBlockInBothPartition)
+            {
+               if(isDeadBlock(index, set_index))
+                  d1++;
+               else
+                  e1++;
+            }
+            else if(deadBlockInNeitherPartition)
+            {
+
+               UInt32 indexLocal = 0;
+               UInt8 max_bits_local = 0;
+
+               for (UInt32 iter2 = 0; iter2 < m_associativity; iter2++)
+               {
+                  //if (m_lru_bits_unified[iter2] > max_bits_local && isValidReplacement(iter2))
+                  if ((m_lru_bits_unified[iter2] > max_bits_local) && (isValidReplacement(iter2)))
+                  {
+                     indexLocal = iter2;
+                     max_bits_local = m_lru_bits_unified[iter2];
+                  }
+               }
+
+               if((indexLocal>=0) && (indexLocal<SRAM_ways))
+                  g1++;
+               else 
+                  f1++;
+            }
+            else if(deadBlockInSRAMOnly)
+            {
+               a1++;
+            }
+            else if(deadBlockInSTTROnly)
+            {
+               if(deadBlockInBothPartition)
+               {
+                  if(isDeadBlock(index, set_index))
+                     b1++;
+                  else
+                     c1++;
+               }
+            }
+         }
+
+         //////////////////////////////////////////////////////////////////////////////////
+
+         
+
+   
+            
+         if((m_cost[index]>K) && (m_state[m_TI[index]]<state_max)) //state should be incremented
+            m_state[m_TI[index]]++;
+         else if((m_cost[index]<K) && (m_state[m_TI[index]]>0))
+            m_state[m_TI[index]]--;         
+         
+         //check if the victim block is read intense, or write intense or deadblock
+
+         if(m_dcnt[m_TI[index]]>=dcnt_threshold)   //deadblock
+            deadblock_counter++;
+         else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]<K))  //read_intense
+            read_intense_block_counter++;
+         else if((m_dcnt[m_TI[index]]<dcnt_threshold)&&(m_cost[index]>=K))  //write_intense
+            write_intense_block_counter++;
+         else
+            printf("ERROR!!!!!!\n");
+
+
+         //Calculating Cmax and Cmin
+         if(m_cost[index]<Cmin)
+            Cmin = m_cost[index];
+         if(m_cost[index]>Cmax)
+            Cmax = m_cost[index];
+
+
+
+         //Calculating Wmax and Wmin
+         if(m_wcnt[m_TI[index]]<Wmin)
+            Wmin = m_wcnt[m_TI[index]];
+         if(m_wcnt[m_TI[index]]>Wmax)
+            Wmax = m_wcnt[m_TI[index]];
+
+
+
+         if(m_dcnt[m_TI[index]] != 255)
+            m_dcnt[m_TI[index]]++;  //increment deadblock counter on eviction
+
+         if(m_wcnt[m_TI[index]] != 0)
+            m_wcnt[m_TI[index]]--;  //decrement write burst counter on eviction
+
+         if((index<SRAM_ways) && (index>=0))
+         {
+            if(m_dcnt[m_TI[index]]<dcnt_threshold)
+               livingSRAMBlocksEvicted++;
+            else
+               deadSRAMBlocksEvicted++;
+
+         }
+
+         if((m1_flag[index]==1) && (mduringwrite_flag[index]==1))
+            doubleMigrationCount++;
+         else if ((m1_flag[index]==0) && (mduringwrite_flag[index]==0))
+            noMigrationCount++;
+         else
+            singleMigrationCount++;
+
+         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         
+         UInt64 percentageReadBeforeM1             =  0;
+         UInt64 percentageWriteBeforeM1            =  0;
+
+         UInt64 percentageReadBeforeMDuringWrite   =  0;
+         UInt64 percentageWriteBeforeMDuringWrite  =  0;
+
+         
+         if (m_read_before_m1[index]!=0)
+            percentageReadBeforeM1             =   ((100 * m_read_before_m1[index])/(m_read_before_m1[index] + m_read_after_m1[index]));
+         if (m_write_before_m1[index]!=0)
+            percentageWriteBeforeM1            =   ((100 * m_write_before_m1[index])/(m_write_before_m1[index] + m_write_after_m1[index]));
+
+         if (m_read_before_mduringwrite[index]!=0)
+            percentageReadBeforeMDuringWrite   =   ((100 * m_read_before_mduringwrite[index])/(m_read_before_mduringwrite[index] + m_read_after_mduringwrite[index])); 
+         if (m_write_before_mduringwrite[index]!=0)
+            percentageWriteBeforeMDuringWrite  =   ((100 * m_write_before_mduringwrite[index])/(m_write_before_mduringwrite[index] + m_write_after_mduringwrite[index]));
+         
+
+         ///////////////////[READ-M1]////////////////////////
+         if ((percentageReadBeforeM1>=0)&&(percentageReadBeforeM1<20))
+         {
+            blocksReadBeforeM1020++;
+            blocksReadAfterM180100++;
+         }
+
+         else if ((percentageReadBeforeM1>=20)&&(percentageReadBeforeM1<40))
+         {
+            blocksReadBeforeM12040++;
+            blocksReadAfterM16080++;
+         }
+
+         else if ((percentageReadBeforeM1>=40)&&(percentageReadBeforeM1<60))
+         {
+            blocksReadBeforeM14060++;
+            blocksReadAfterM14060++;
+         }
+
+         else if ((percentageReadBeforeM1>=60)&&(percentageReadBeforeM1<80))
+         {
+            blocksReadBeforeM16080++;
+            blocksReadAfterM12040++;
+         }
+
+         else if ((percentageReadBeforeM1>=80)&&(percentageReadBeforeM1<=100))
+         {
+
+            blocksReadBeforeM180100++;
+            blocksReadAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[READ-MDURINGWRITE]////////////////////////
+         if ((percentageReadBeforeMDuringWrite>=0)&&(percentageReadBeforeMDuringWrite<20))
+         {
+            blocksReadBeforeMDuringWrite020++;
+            blocksReadAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=20)&&(percentageReadBeforeMDuringWrite<40))
+         {
+            blocksReadBeforeMDuringWrite2040++;
+            blocksReadAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=40)&&(percentageReadBeforeMDuringWrite<60))
+         {
+            blocksReadBeforeMDuringWrite4060++;
+            blocksReadAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=60)&&(percentageReadBeforeMDuringWrite<80))
+         {
+            blocksReadBeforeMDuringWrite6080++;
+            blocksReadAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageReadBeforeMDuringWrite>=80)&&(percentageReadBeforeMDuringWrite<=100))
+         {
+            blocksReadBeforeMDuringWrite80100++;
+            blocksReadAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+
+         ///////////////////[WRITE-M1]////////////////////////
+
+         if ((percentageWriteBeforeM1>=0)&&(percentageWriteBeforeM1<20))
+         {
+            blocksWriteBeforeM1020++;
+            blocksWriteAfterM180100++;
+         }
+
+         else if ((percentageWriteBeforeM1>=20)&&(percentageWriteBeforeM1<40))
+         {
+            blocksWriteBeforeM12040++;
+            blocksWriteAfterM16080++;
+         }
+
+         else if ((percentageWriteBeforeM1>=40)&&(percentageWriteBeforeM1<60))
+         {
+            blocksWriteBeforeM14060++;
+            blocksWriteAfterM14060++;
+         }
+
+         else if ((percentageWriteBeforeM1>=60)&&(percentageWriteBeforeM1<80))
+         {
+            blocksWriteBeforeM16080++;
+            blocksWriteAfterM12040++;
+         }
+
+         else if ((percentageWriteBeforeM1>=80)&&(percentageWriteBeforeM1<=100))
+         {
+            blocksWriteBeforeM180100++;
+            blocksWriteAfterM1020++;
+         }
+
+         else
+         {
+
+         }
+
+
+         ///////////////////[WRITE-MDURINGWRITE]////////////////////////
+         if ((percentageWriteBeforeMDuringWrite>=0)&&(percentageWriteBeforeMDuringWrite<20))
+         {
+            blocksWriteBeforeMDuringWrite020++;
+            blocksWriteAfterMDuringWrite80100++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=20)&&(percentageWriteBeforeMDuringWrite<40))
+         {
+            blocksWriteBeforeMDuringWrite2040++;
+            blocksWriteAfterMDuringWrite6080++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=40)&&(percentageWriteBeforeMDuringWrite<60))
+         {
+            blocksWriteBeforeMDuringWrite4060++;
+            blocksWriteAfterMDuringWrite4060++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=60)&&(percentageWriteBeforeMDuringWrite<80))
+         {
+            blocksWriteBeforeMDuringWrite6080++;
+            blocksWriteAfterMDuringWrite2040++;
+         }
+
+         else if ((percentageWriteBeforeMDuringWrite>=80)&&(percentageWriteBeforeMDuringWrite<=100))
+         {
+            blocksWriteBeforeMDuringWrite80100++;
+            blocksWriteAfterMDuringWrite020++;
+         }
+
+         else
+         {
+            
+         }
+
+         if (m1_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-M1]//////////////////////////
+            if ((m_read_before_m1[index]+m_read_after_m1[index])>(sf*(m_write_before_m1[index]+m_write_after_m1[index])))
+               readIntenseBlocksM1++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-M1]//////////////////////////
+            else
+               writeIntenseBlocksM1++;
+         }
+         
+         if (mduringwrite_flag[index]==1)
+         {
+            ///////////////////[READ-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            if ((m_read_before_mduringwrite[index]+m_read_after_mduringwrite[index])>(sf*(m_write_before_mduringwrite[index]+m_write_after_mduringwrite[index])))
+               readIntenseBlocksMDuringWrite++;
+
+            ///////////////////[WRITE-INTENSE-BLOCKS-MDURINGWRITE]//////////////////////////
+            else
+               writeIntenseBlocksMDuringWrite++;
+         }
+         
+         
+         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+         
+         m_TI[index]=eip_truncated;
+         m_cost[index]=128;   //in paper cost varies from -127 to 128. I am varying it from 0 to 255. 128 is 0 for me.
+
+         if((index>=0) && (index<SRAM_ways) && (read_array[index]>(sf*write_array[index])))  //SRAM ways. Predicted Write intensive
+            writeToReadTransitionsAtEviction++;
+         if((index>=SRAM_ways) && (index<m_associativity) && (read_array[index]<(sf*write_array[index])))   //STTRAM ways, predicted read intensive
+            readToWriteTransitionsAtEviction++;
+
+         histogram[access_counter[index]]++;
+         access_counter[index] = 0;
+
+         write_array[index] = 0;  //reset the counters on eviction
+         read_array[index] = 0;
+         m_deadblock[index] = 0;
+
+         m_read_before_m1[index]  = 0;
+         m_write_before_m1[index] = 0;  
+         m_read_after_m1[index]   = 0; 
+         m_write_after_m1[index]  = 0; 
+         m1_flag[index]           = 0; 
+
+         m_read_before_mduringwrite[index]  = 0;
+         m_write_before_mduringwrite[index] = 0;  
+         m_read_after_mduringwrite[index]   = 0; 
+         m_write_after_mduringwrite[index]  = 0; 
+         mduringwrite_flag[index]           = 0;  //If a block has been migrated this is set to 1     
+
+         validBlockEvicted++;
+
+         // Mark our newly-inserted line as most-recently used
+         moveToMRU(index);
+         m_set_info->incrementAttempt(attempt); 
+       
+
+         return index;
+         
+      } 
+   }
+
+
    else //non-sampler set, uses phc
    {  
       //printf("non-sampler\n");
@@ -1566,7 +3138,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
             for (UInt32 i = SRAM_ways; i < m_associativity; i++)  //checking for  deadblock in STTRAM
             {
-               if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i)) && (isValidReplacement(i)))
+               if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
                {
                   index = i;
                   max_dcnt2 = m_dcnt[m_TI[i]];
@@ -1582,7 +3154,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                for (UInt32 i = 0; i < SRAM_ways; i++)
                {
-                  if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i)) && (isValidReplacement(i)))
+                  if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
                   {
                      forceMigrationIndex = i;
                      max_dcnt2 = m_dcnt[m_TI[i]];
@@ -1594,7 +3166,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                {
 
                   index =  SRAM_ways;
-                  //find out a victim from STTRAM
+                  //find out a victim from STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
+
+                  //Most LRU block in STTRAM
+                  /*
                   for (UInt32 i = SRAM_ways; i < m_associativity; i++)
                   {
                      if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -1603,13 +3178,27 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         max_bits = m_lru_bits[i];
                      }
                   }
-
+                  */
+                  
+                  //Most write intensive block in STTRAM
+                  UInt8 maxState = 0;
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        maxState = m_state[m_TI[i]];
+                     }
+                  }
+                  
                   //swap it with forceMigrationIndex from SRAM
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSTTramToSram++;
                }
                else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
                {
+                  
+                  ///////////////////////////////
                   index = SRAM_ways;
 
                   for (UInt32 i = SRAM_ways; i < m_associativity; i++)
@@ -1619,7 +3208,9 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         index = i;
                         max_bits = m_lru_bits[i];
                      }
-                  }
+                  }               
+                  ///////////////////////////////
+
                }
             }
             
@@ -1635,7 +3226,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
             for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
             {
-               if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i)) && (isValidReplacement(i)))
+               if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
                {
                   index = i;
                   max_dcnt = m_dcnt[m_TI[i]];
@@ -1651,7 +3242,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                for (UInt32 i = SRAM_ways; i < m_associativity; i++) //checking for deadblock in  STTRAM partition
                {
-                  if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i)) && (isValidReplacement(i)))
+                  if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
                   {  
                      forceMigrationIndex = i;
                      max_dcnt = m_dcnt[m_TI[i]];
@@ -1664,7 +3255,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                   index = 0;
 
-                  //find out a victim from SRAM
+                  //find out a victim from SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
+
+                  //Most LRU block in SRAM
+                  /*
                   for (UInt32 i = 0; i < SRAM_ways; i++)
                   {
                      if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -1673,6 +3267,19 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         max_bits = m_lru_bits[i];
                      }
                   }
+                  */
+                  
+                  //Most Read Intense Block in SRAM
+                  UInt8 minState = 255;
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        minState = m_state[m_TI[i]];
+                     }
+                  }
+                  
 
                   //swap it with forceMigrationIndex block from STTRAM
                   swapTwoBlocks(index, forceMigrationIndex);
@@ -1680,7 +3287,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
                else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
                {
-
                   index = 0;
 
                   for (UInt32 i = 0; i < SRAM_ways; i++)
@@ -1690,7 +3296,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         index = i;
                         max_bits = m_lru_bits[i];
                      }
-                  }
+                  }               
+
                }
 
                /////////////////////////////////////////////////////////////////////////////////////////
@@ -1720,13 +3327,13 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          //checking deadblock///
          for(UInt32 iter=0; iter<SRAM_ways; iter++)
          {
-            if(isDeadBlock(iter))
+            if(isDeadBlock(iter, set_index))
                deadblockInSRAMFlag=true;
 
          }
          for(UInt32 iter=SRAM_ways; iter<m_associativity; iter++)
          {
-            if(isDeadBlock(iter))
+            if(isDeadBlock(iter, set_index))
                deadblockInSTTRFlag=true;
             
          }
@@ -1748,7 +3355,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             if(deadBlockInBothPartition)
             {
 
-               if(isDeadBlock(index))
+               if(isDeadBlock(index, set_index))
                   d0++;
                else
                   e0++;
@@ -1779,7 +3386,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             {
                if(deadBlockInBothPartition)
                {
-                  if(isDeadBlock(index))
+                  if(isDeadBlock(index, set_index))
                      b0++;
                   else
                      c0++;
@@ -1801,7 +3408,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
             if(deadBlockInBothPartition)
             {
-               if(isDeadBlock(index))
+               if(isDeadBlock(index, set_index))
                   d1++;
                else
                   e1++;
@@ -1835,7 +3442,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             {
                if(deadBlockInBothPartition)
                {
-                  if(isDeadBlock(index))
+                  if(isDeadBlock(index, set_index))
                      b1++;
                   else
                      c1++;
@@ -2179,6 +3786,14 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
       m_cost[accessed_index]=m_cost[accessed_index]+Ew;  //cost modification
       write_array[accessed_index]++;   //write_array is the number of writes to a block
 
+      if ((accessed_index>=0) && (accessed_index<m_associativity))
+      {
+         if(accessed_index<SRAM_ways)
+            SRAM_write_hits++;
+         else
+            STTR_write_hits++;
+      }
+
       if(m1_flag[accessed_index]==0) //The block has not been migrated
       {
          m_write_before_m1[accessed_index]++;
@@ -2231,6 +3846,17 @@ CacheSetPHC::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UIn
    {
       m_cost[accessed_index]=m_cost[accessed_index]-Er;
       read_array[accessed_index]++;    //read_array is the number of reads to a block
+
+
+      if ((accessed_index>=0) && (accessed_index<m_associativity))
+      {
+         if(accessed_index<SRAM_ways)
+            SRAM_reads_hits++;
+         else
+            STTR_reads_hits++;
+      }
+
+
 
       if(m1_flag[accessed_index]==0) //The block has not been migrated
       {
@@ -2317,6 +3943,12 @@ CacheSetPHC::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, In
    
    if ((accessed_index>=0) && (accessed_index<m_associativity))
    {
+      if(accessed_index<SRAM_ways)
+         SRAM_write_hits++;
+      else
+         STTR_write_hits++;
+
+
 
       if(m1_flag[accessed_index]==0) //The block has not been migrated
       {
@@ -2483,12 +4115,31 @@ CacheSetPHC::truncatedEipCalculation(IntPtr a)  //hashing
 }
 
 bool
-CacheSetPHC::isDeadBlock(UInt32 index)
+CacheSetPHC::isDeadBlock(UInt32 index, UInt32 set_index_local)
 {
-   if (m_dcnt[m_TI[index]]>=dcnt_threshold)
-      return true;
-   else 
-      return false;
+   //printf("dcnt_threshold_min is %d, dcnt_threshold is %d and dcnt_threshold_plu is %d\n", dcnt_threshold_min, dcnt_threshold, dcnt_threshold_plu);
+   if((set_index_local % sampler_fraction)==3)
+   {
+      if (m_dcnt[m_TI[index]]>=dcnt_threshold_min)
+         return true;
+      else 
+         return false;
+   }
+   else if ((set_index_local % sampler_fraction)==4)
+   {
+      if (m_dcnt[m_TI[index]]>=dcnt_threshold_plu)
+         return true;
+      else 
+         return false;
+   }
+   else
+   {
+      if (m_dcnt[m_TI[index]]>=dcnt_threshold)
+         return true;
+      else 
+         return false;
+   }
+   
 }
 
 
@@ -2496,7 +4147,7 @@ void
 CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
 {
    
-   
+   /*
    UInt32 stt_index = -1;
    UInt8 local_max_bits = 0;
    CacheBlockInfo* temp_cache_block_info = CacheBlockInfo::create(CacheBase::SHARED_CACHE);
@@ -2618,7 +4269,7 @@ CacheSetPHC::migrate(UInt32 sram_index)   //migration during eviction
    {
 
    }
-   
+   */
    
    
 }
