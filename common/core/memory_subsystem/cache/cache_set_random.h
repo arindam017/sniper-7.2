@@ -10,9 +10,10 @@ class CacheSetRandom : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetRandom();
 
-      UInt32 getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index);
+      UInt32 getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index);
       void updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index);
-void updateLoopBitPolicy(UInt32 index, UInt8 loopbit); //sn
+
+      void updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, IntPtr eip);   //created by arindam to pass writeback information to policy files (required in phc)
 
    private:
       Random m_rand;

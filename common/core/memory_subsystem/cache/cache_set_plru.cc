@@ -19,7 +19,7 @@ CacheSetPLRU::~CacheSetPLRU()
 }
 
 UInt32
-CacheSetPLRU::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index)
+CacheSetPLRU::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index)
 {
    // Invalidations may mess up the LRU bits
 
@@ -114,10 +114,11 @@ CacheSetPLRU::updateReplacementIndex(UInt32 accessed_index,  UInt8 write_flag, U
    }
 }
 
-////////////created by Arindam//////////////////sn
+//////////////////////////////////////////////////////////////////////////////////////////////
+//created by arindam to pass writeback information to policy files (required in phc)
 void
-CacheSetPLRU::updateLoopBitPolicy(UInt32 index, UInt8 loopbit)
+CacheSetPLRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, IntPtr eip)
 {
-  
+
 }
-//////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////

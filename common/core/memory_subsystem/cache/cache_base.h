@@ -61,9 +61,6 @@ class CacheBase
          SRRIP_QBS,
          RANDOM,
          NUM_REPLACEMENT_POLICIES,
-         LRU_NEW,
-         LRU_L3,
-         LRU_L2,
          PHC
       };
 

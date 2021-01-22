@@ -22,7 +22,7 @@ CacheSetLRU::~CacheSetLRU()
 }
 
 UInt32
-CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr eip, UInt32 set_index)
+CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index)
 {
    // First try to find an invalid block
    for (UInt32 i = 0; i < m_associativity; i++)
@@ -81,19 +81,18 @@ CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr, UInt8 l3_hit_flag, IntPtr ei
 void
 CacheSetLRU::updateReplacementIndex(UInt32 accessed_index, UInt8 write_flag, UInt32 set_index)
 {
-   if(write_flag==1)
-      //printf("updateReplacementIndex for L1 called and write_flag is %d \n", write_flag); //nss
    m_set_info->increment(m_lru_bits[accessed_index]);
    moveToMRU(accessed_index);
 }
 
-////////////created by Arindam//////////////////sn
+//////////////////////////////////////////////////////////////////////////////////////////////
+//created by arindam to pass writeback information to policy files (required in phc)
 void
-CacheSetLRU::updateLoopBitPolicy(UInt32 index, UInt8 loopbit)
+CacheSetLRU::updateReplacementIndex2(UInt32 accessed_index, UInt32 set_index, IntPtr eip)
 {
-  
+
 }
-//////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 void
 CacheSetLRU::moveToMRU(UInt32 accessed_index)
