@@ -11,8 +11,9 @@ parser="./parser_all_qsize.py"
 #benchmarks=(astar libq lbm bwaves bzip cactusADM gcc gobmk GemsFDTD gromacs h264ref hmmer leslie milc namd omnetpp sjeng soplex sphinx tonto wrf zeusmp mcf perlbench)
 
 #REUSE SELECTED BENCHMARKS = 15
-benchmarks=(astar bwaves bzip cactusADM gcc GemsFDTD gobmk gromacs h264ref hmmer lbm leslie libq mcf milc namd omnetpp perlbench sjeng soplex sphinx tonto trace wrf zeusmp)
-#benchmarks=(cactusADM gcc GemsFDTD lbm leslie libq mcf milc omnetpp soplex zeusmp)  #Done in MTP2
+#benchmarks=(astar bwaves bzip cactusADM gcc GemsFDTD gobmk gromacs h264ref hmmer lbm leslie libq mcf milc namd omnetpp perlbench sjeng soplex sphinx tonto trace wrf zeusmp)
+benchmarks=(cactusADM gcc GemsFDTD lbm leslie libq mcf milc omnetpp soplex zeusmp)  #Done in MTP2
+#benchmarks=(gcc GemsFDTD)
 
 
 #Thrashing benchmarks = 8 milc to be added.
@@ -28,14 +29,14 @@ benchmarks=(astar bwaves bzip cactusADM gcc GemsFDTD gobmk gromacs h264ref hmmer
 #suffix=(1 10 20 100)
 #benchmarks=(cactusADM mcf sphinx milc astar leslie lbm bwaves libq)
 #benchmarks=(cactusADM sphinx)
-for i in {0..24}
+for i in {0..10}
     do
 	echo "===================================================================================================================================="
 	echo ""
 	echo ""
 	echo ""
 	echo ""
-	/home/arindam/Desktop/Sniper/sniper-7.2_para23_2_t192/parser_files/phc/ultimate_parser_single_core.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_2_t192/expt_results/phc_para23_2_t192/${benchmarks[i]} 1
+	/home/arindam/Desktop/Sniper/sniper-7.2_para23_setDualling/parser_files/phc/ultimate_parser_single_core.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_setDualling/expt_results/phc_para23_setDualling/${benchmarks[i]} 1
 	echo ""
 	echo ""
 	echo ""
