@@ -35,7 +35,7 @@ for i in {0..24}
 	echo ""
 	echo ""
 	echo ""
-	/home/arindam/Desktop/Sniper/sniper-7.2_para23_2_t192/parser_files/phc/ultimate_parser_single_core.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_2_t192/expt_results/phc_para23_2_t192/${benchmarks[i]} 1
+	/home/arindam/Desktop/Sniper/sniper-7.2_para23_6_t192/parser_files/phc/ultimate_parser_single_core.py /home/arindam/Desktop/Sniper/sniper-7.2_para23_6_t192/expt_results/phc_para23_6_t192/${benchmarks[i]} 1
 	echo ""
 	echo ""
 	echo ""

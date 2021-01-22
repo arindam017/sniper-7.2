@@ -7,7 +7,7 @@
 #$4 result folder
 
 pre="/home/arindam/Desktop/Sniper/250M/"
-pre_res="/home/arindam/Desktop/Sniper/sniper-7.2_para23_2_t192/expt_results/"
+pre_res="/home/arindam/Desktop/Sniper/sniper-7.2_para23_6_t192/expt_results/"
 extn=".out"
 
 # lets understand the script with an example
