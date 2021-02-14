@@ -91,7 +91,7 @@ static UInt8 m_dcnt[256] = {0};              //deadblock predictor table
 static UInt8 dcnt_initialization = 0;        //this variable is used to make sure dcnt is initialized only once
 
 //////////////////dynamis deadblock threshold////////////////////////////////////////
-static UInt8 dcnt_threshold = 192;                //deadblock predictor table threshold 
+static UInt8 dcnt_threshold = 136;                //deadblock predictor table threshold 
 static UInt8 dcnt_threshold_plu = 194;           //deadblock predictor table threshold 
 static UInt8 dcnt_threshold_min = 190;           //deadblock predictor table threshold 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -561,7 +561,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       //////////////////// deadblock threshold adjustment//////////////////////////
 
       //printf("MSamplerSetDcntMin is %d, MSamplerSetDcntPlu is %d and M0 is %d\n", MSamplerSetDcntMin, MSamplerSetDcntPlu, M0);
-
+      /*
       if (MSamplerSetDcntMin < MSamplerSetDcntPlu)
       {
          if(MSamplerSetDcntMin <= M0)
@@ -621,7 +621,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             
          }
       }
-
+      */
 
       /////////////////////////////////////////////////////////////////////////////
       
@@ -3785,27 +3785,27 @@ bool
 CacheSetPHC::isDeadBlock(UInt32 index, UInt32 set_index_local)
 {
    //printf("dcnt_threshold_min is %d, dcnt_threshold is %d and dcnt_threshold_plu is %d\n", dcnt_threshold_min, dcnt_threshold, dcnt_threshold_plu);
-   if((set_index_local % sampler_fraction)==3)
-   {
-      if (m_dcnt[m_TI[index]]>=dcnt_threshold_min)
-         return true;
-      else 
-         return false;
-   }
-   else if ((set_index_local % sampler_fraction)==4)
-   {
-      if (m_dcnt[m_TI[index]]>=dcnt_threshold_plu)
-         return true;
-      else 
-         return false;
-   }
-   else
-   {
+   //if((set_index_local % sampler_fraction)==3)
+   //{
+   //   if (m_dcnt[m_TI[index]]>=dcnt_threshold_min)
+   //      return true;
+   //   else 
+   //      return false;
+   //}
+   //else if ((set_index_local % sampler_fraction)==4)
+   //{
+   //   if (m_dcnt[m_TI[index]]>=dcnt_threshold_plu)
+   //      return true;
+   //   else 
+   //      return false;
+   //}
+   //else
+   //{
       if (m_dcnt[m_TI[index]]>=dcnt_threshold)
          return true;
       else 
          return false;
-   }
+   //}
    
 }
 
