@@ -1664,8 +1664,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
             }
 
-            if(!checkFlag2)   //No valid deadblock found in STTRAM. Proceed with baseline PHC
+            if(!checkFlag2)   //No valid deadblock found in STTRAM. Select LRU block from STTRAM as victim
             {
+            
+               ///////////////////////////////
+               index = SRAM_ways;
                for (UInt32 i = SRAM_ways; i < m_associativity; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -1673,7 +1676,9 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                      index = i;
                      max_bits = m_lru_bits[i];
                   }
-               }
+               }               
+               ///////////////////////////////
+
             }
             
          }
@@ -1686,6 +1691,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             bool checkFlag=false;
             UInt8 max_dcnt = 0;
 
+            index = 0;
+
             for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
             {
                if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
@@ -1696,10 +1703,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
             }
 
-            if(!checkFlag) //valid deadblock not found in SRAM. Proceed with baseline PHCAM 
+            if(!checkFlag) //valid deadblock not found in SRAM. Select LRU block from SRAM as victim
             {
-               ////////////////////////////////////////////////////////////////////////////////////////
 
+               index = 0;
                for (UInt32 i = 0; i < SRAM_ways; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -1707,11 +1714,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                      index = i;
                      max_bits = m_lru_bits[i];
                   }
-               }
-
-               /////////////////////////////////////////////////////////////////////////////////////////
-
+               }               
             }
+
+            /////////////////////////////////////////////////////////////////////////////////////////
+
          }
 
 
@@ -2292,8 +2299,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
             }
 
-            if(!checkFlag2)   //No valid deadblock found in STTRAM. Proceed with baseline PHC
+            if(!checkFlag2)   //No valid deadblock found in STTRAM. Select LRU block from STTRAM as victim
             {
+               ///////////////////////////////
+               index = SRAM_ways;
                for (UInt32 i = SRAM_ways; i < m_associativity; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -2301,7 +2310,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                      index = i;
                      max_bits = m_lru_bits[i];
                   }
-               }
+               }               
+               ///////////////////////////////
             }
             
          }
@@ -2314,6 +2324,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             bool checkFlag=false;
             UInt8 max_dcnt = 0;
 
+            index = 0;
+
             for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
             {
                if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
@@ -2324,10 +2336,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
             }
 
-            if(!checkFlag) //valid deadblock not found in SRAM. Proceed with baseline PHCAM 
+            if(!checkFlag) //valid deadblock not found in SRAM. Se;ect LRU from SRAM as victim
             {
-               ////////////////////////////////////////////////////////////////////////////////////////
 
+               index = 0;
                for (UInt32 i = 0; i < SRAM_ways; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -2335,11 +2347,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                      index = i;
                      max_bits = m_lru_bits[i];
                   }
-               }
-
-               /////////////////////////////////////////////////////////////////////////////////////////
-
+               }               
             }
+
+            /////////////////////////////////////////////////////////////////////////////////////////
+
          }
 
 
@@ -2923,9 +2935,49 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   checkFlag2 = true;
                }
             }
-
-            if(!checkFlag2)   //No valid deadblock found in STTRAM. Proceed with baseline PHC
+            
+            if(!checkFlag2)   //No valid deadblock found in STTRAM. Select LRU block in STTRAM as victim
             {
+               /*
+               forceMigrationIndex = 0;
+               bool checkFlag3 = false;
+
+               for (UInt32 i = 0; i < SRAM_ways; i++)
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt2) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+                  {
+                     forceMigrationIndex = i;
+                     max_dcnt2 = m_dcnt[m_TI[i]];
+                     checkFlag3 = true;
+                  }
+               }
+               
+               if(checkFlag3) //valid deadblock found in SRAM. find out a victim from STTRAM. swap it with forceMigrationIndex from SRAM
+               {
+
+                  index =  SRAM_ways;
+                  
+                  //Most write intensive block in STTRAM
+                  UInt8 maxState = 0;
+                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  {
+                     if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        maxState = m_state[m_TI[i]];
+                     }
+                  }
+                  
+                  //swap it with forceMigrationIndex from SRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSTTramToSram++;
+               }
+
+               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               {
+               */   
+                ///////////////////////////////
+               index = SRAM_ways;
                for (UInt32 i = SRAM_ways; i < m_associativity; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -2933,7 +2985,9 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                      index = i;
                      max_bits = m_lru_bits[i];
                   }
-               }
+               }               
+                ///////////////////////////////
+
             }
             
          }
@@ -2946,6 +3000,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             bool checkFlag=false;
             UInt8 max_dcnt = 0;
 
+            index = 0;
+            
             for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
             {
                if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
@@ -2956,10 +3012,48 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                }
             }
 
-            if(!checkFlag) //valid deadblock not found in SRAM. Proceed with baseline PHCAM 
+            if(!checkFlag) //valid deadblock not found in SRAM. Select LRU block in SRAM as victim
             {
-               ////////////////////////////////////////////////////////////////////////////////////////
+               /*
+               forceMigrationIndex = SRAM_ways; 
+               bool checkFlag1=false; 
 
+               for (UInt32 i = SRAM_ways; i < m_associativity; i++) //checking for deadblock in  STTRAM partition
+               {
+                  if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
+                  {  
+                     forceMigrationIndex = i;
+                     max_dcnt = m_dcnt[m_TI[i]];
+                     checkFlag1 = true;
+                  }
+               }
+
+               if(checkFlag1)   //valid deadblock found in STTRAM. find out a victim from SRAM. swap it with forceMigrationIndex block from STTRAM
+               {
+
+                  index = 0;
+
+                  //Most Read Intense Block in SRAM
+                  UInt8 minState = 255;
+                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  {
+                     if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                     {
+                        index = i;
+                        minState = m_state[m_TI[i]];
+                     }
+                  }
+                  
+
+                  //swap it with forceMigrationIndex block from STTRAM
+                  swapTwoBlocks(index, forceMigrationIndex);
+                  forceMigrationSramToSTTram++;
+               }
+               
+               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               {
+               */
+               index = 0;
                for (UInt32 i = 0; i < SRAM_ways; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -2967,11 +3061,13 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                      index = i;
                      max_bits = m_lru_bits[i];
                   }
-               }
+               }               
+
+            }
 
                /////////////////////////////////////////////////////////////////////////////////////////
 
-            }
+        
          }
 
 
