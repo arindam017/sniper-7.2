@@ -4514,6 +4514,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
             if(!checkFlag2)   //No valid deadblock found in STTRAM. Proceed with baseline PHC
             {
+               index = SRAM_ways;
                for (UInt32 i = SRAM_ways; i < m_associativity; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -4534,6 +4535,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             bool checkFlag=false;
             UInt8 max_dcnt = 0;
 
+            index = 0;
+
             for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
             {
                if ((m_dcnt[m_TI[i]] > max_dcnt) && (isDeadBlock(i, set_index)) && (isValidReplacement(i)))
@@ -4547,7 +4550,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             if(!checkFlag) //valid deadblock not found in SRAM. Proceed with baseline PHCAM 
             {
                ////////////////////////////////////////////////////////////////////////////////////////
-
+               index = 0;
                for (UInt32 i = 0; i < SRAM_ways; i++)
                {
                   if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -6479,6 +6482,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       
                   if(!checkFlag2)   //No valid deadblock found in STTRAM. Proceed with baseline PHC
                   {
+                     index = SRAM_ways;
                      for (UInt32 i = SRAM_ways; i < m_associativity; i++)
                      {
                         if (m_lru_bits[i] > max_bits && isValidReplacement(i))
@@ -6498,6 +6502,8 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
       
                   bool checkFlag=false;
                   UInt8 max_dcnt = 0;
+
+                  index = 0;
       
                   for (UInt32 i = 0; i < SRAM_ways; i++) //checking for deadblock in  SRAM partition
                   {
@@ -6512,7 +6518,7 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   if(!checkFlag) //valid deadblock not found in SRAM. Proceed with baseline PHCAM 
                   {
                      ////////////////////////////////////////////////////////////////////////////////////////
-      
+                     index = 0;
                      for (UInt32 i = 0; i < SRAM_ways; i++)
                      {
                         if (m_lru_bits[i] > max_bits && isValidReplacement(i))
