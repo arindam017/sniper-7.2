@@ -1685,18 +1685,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                   index =  SRAM_ways;
                   //find out a victim from STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
-
-                  //Most LRU block in STTRAM
-                  /*
-                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-                  {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-                     {
-                        index = i;
-                        max_bits = m_lru_bits[i];
-                     }
-                  }
-                  */
                   
                   //Most write intensive block in STTRAM
                   UInt8 maxState = 0;
@@ -1713,20 +1701,59 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSTTramToSram++;
                }
-               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               else  //valid deadblock not found in SRAM. Try to find out more LRU block in SRAM
                {
                   
                   ///////////////////////////////
-                  index = SRAM_ways;
+                  //find out LRU block of entire set
+                  UInt32 indexTotal = 0;
+                  UInt8 max_bits_total = 0;
 
-                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  for (UInt32 i = 0; i < m_associativity; i++)
                   {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     if ((m_lru_bits_unified[i] > max_bits_total) && (isValidReplacement(i)))
                      {
-                        index = i;
-                        max_bits = m_lru_bits[i];
+                        indexTotal = i;
+                        max_bits_total = m_lru_bits_unified[i];
                      }
-                  }               
+                  }
+
+                  if ((indexTotal>=0) && (indexTotal<SRAM_ways))   //more LRU block in SRAM portion. We need to swap
+                  {
+                     //find out lru block in STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
+                     UInt32 indexSTTRAM = 0;
+                     
+                     //Most Write Intensive Block in STTRAM
+                     UInt8 maxState = 0;
+                     for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                     {
+                        if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                        {
+                           indexSTTRAM = i;
+                           maxState = m_state[m_TI[i]];
+                        }
+                     }
+
+                     swapTwoBlocks(indexSTTRAM, indexTotal);
+                     forceMigrationSTTramToSram++;
+                     index = indexSTTRAM; 
+
+                  }
+                  else //Proceed with baseline PHC
+                  {
+                     index = SRAM_ways;
+                     for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                     {
+                        if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                        {
+                           index = i;
+                           max_bits = m_lru_bits[i];
+                        }
+                     }
+                  }
+
+
+
                   ///////////////////////////////
 
                }
@@ -1775,18 +1802,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                   //find out a victim from SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
 
-                  //Most LRU block in SRAM
-                  /*
-                  for (UInt32 i = 0; i < SRAM_ways; i++)
-                  {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-                     {
-                        index = i;
-                        max_bits = m_lru_bits[i];
-                     }
-                  }
-                  */
-                  
                   //Most Read Intense Block in SRAM
                   UInt8 minState = 255;
                   for (UInt32 i = 0; i < SRAM_ways; i++)
@@ -1797,24 +1812,62 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         minState = m_state[m_TI[i]];
                      }
                   }
-                  
+
 
                   //swap it with forceMigrationIndex block from STTRAM
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSramToSTTram++;
                }
-               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               else  //valid deadblock not found in STTRAM. Try to find a more LRU block in STTRAM
                {
-                  index = 0;
+               
+                  //find out LRU block of entire set
+                  UInt32 indexTotal = 0;
+                  UInt8 max_bits_total = 0;
 
-                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  for (UInt32 i = 0; i < m_associativity; i++)
                   {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     if ((m_lru_bits_unified[i] > max_bits_total) && (isValidReplacement(i)))
                      {
-                        index = i;
-                        max_bits = m_lru_bits[i];
+                        indexTotal = i;
+                        max_bits_total = m_lru_bits_unified[i];
                      }
-                  }               
+                  }
+
+                  if ((indexTotal>=SRAM_ways) && (indexTotal<m_associativity))   //more LRU block in STTRAM portion. We need to swap
+                  {
+                     //find out lru block in SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
+                     UInt32 indexSRAM = 0;
+
+                     //Most Read Intensive Block in SRAM
+                     UInt8 minState = 255;
+                     for (UInt32 i = 0; i < SRAM_ways; i++)
+                     {
+                        if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                        {
+                           indexSRAM = i;
+                           minState = m_state[m_TI[i]];
+                        }
+                     }
+
+
+                     swapTwoBlocks(indexSRAM, indexTotal);
+                     forceMigrationSramToSTTram++;
+                     index = indexSRAM; 
+
+                  }
+                  else //Proceed with baseline PHC
+                  {
+                     index = 0;
+                     for (UInt32 i = 0; i < SRAM_ways; i++)
+                     {
+                        if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                        {
+                           index = i;
+                           max_bits = m_lru_bits[i];
+                        }
+                     }
+                  }
 
                }
 
@@ -2425,18 +2478,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   index =  SRAM_ways;
                   //find out a victim from STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
 
-                  //Most LRU block in STTRAM
-                  /*
-                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-                  {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-                     {
-                        index = i;
-                        max_bits = m_lru_bits[i];
-                     }
-                  }
-                  */
-                  
                   //Most write intensive block in STTRAM
                   UInt8 maxState = 0;
                   for (UInt32 i = SRAM_ways; i < m_associativity; i++)
@@ -2447,27 +2488,65 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         maxState = m_state[m_TI[i]];
                      }
                   }
-                  
+
                   //swap it with forceMigrationIndex from SRAM
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSTTramToSram++;
                }
-               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               else  //valid deadblock not found in SRAM. Try to find out more LRU block in SRAM
                {
                   
                   ///////////////////////////////
-                  index = SRAM_ways;
+                  //find out LRU block of entire set
+                  UInt32 indexTotal = 0;
+                  UInt8 max_bits_total = 0;
 
-                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  for (UInt32 i = 0; i < m_associativity; i++)
                   {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     if ((m_lru_bits_unified[i] > max_bits_total) && (isValidReplacement(i)))
                      {
-                        index = i;
-                        max_bits = m_lru_bits[i];
+                        indexTotal = i;
+                        max_bits_total = m_lru_bits_unified[i];
                      }
-                  }               
-                  ///////////////////////////////
+                  }
 
+                  if ((indexTotal>=0) && (indexTotal<SRAM_ways))   //more LRU block in SRAM portion. We need to swap
+                  {
+                     //find out lru block in STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
+                     UInt32 indexSTTRAM = 0;
+                     
+                     //Most Write Intensive Block in STTRAM
+                     UInt8 maxState = 0;
+                     for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                     {
+                        if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                        {
+                           indexSTTRAM = i;
+                           maxState = m_state[m_TI[i]];
+                        }
+                     }
+
+                     swapTwoBlocks(indexSTTRAM, indexTotal);
+                     forceMigrationSTTramToSram++;
+                     index = indexSTTRAM; 
+
+                  }
+                  else //Proceed with baseline PHC
+                  {
+                     index = SRAM_ways;
+                     for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                     {
+                        if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                        {
+                           index = i;
+                           max_bits = m_lru_bits[i];
+                        }
+                     }
+                  }
+
+
+
+                  ///////////////////////////////
                }
             }
             
@@ -2514,18 +2593,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                   //find out a victim from SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
 
-                  //Most LRU block in SRAM
-                  /*
-                  for (UInt32 i = 0; i < SRAM_ways; i++)
-                  {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-                     {
-                        index = i;
-                        max_bits = m_lru_bits[i];
-                     }
-                  }
-                  */
-                  
                   //Most Read Intense Block in SRAM
                   UInt8 minState = 255;
                   for (UInt32 i = 0; i < SRAM_ways; i++)
@@ -2536,24 +2603,62 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         minState = m_state[m_TI[i]];
                      }
                   }
-                  
+
 
                   //swap it with forceMigrationIndex block from STTRAM
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSramToSTTram++;
                }
-               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               else  //valid deadblock not found in STTRAM. Try to find a more LRU block in STTRAM
                {
-                  index = 0;
+               
+                  //find out LRU block of entire set
+                  UInt32 indexTotal = 0;
+                  UInt8 max_bits_total = 0;
 
-                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  for (UInt32 i = 0; i < m_associativity; i++)
                   {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     if ((m_lru_bits_unified[i] > max_bits_total) && (isValidReplacement(i)))
                      {
-                        index = i;
-                        max_bits = m_lru_bits[i];
+                        indexTotal = i;
+                        max_bits_total = m_lru_bits_unified[i];
                      }
-                  }               
+                  }
+
+                  if ((indexTotal>=SRAM_ways) && (indexTotal<m_associativity))   //more LRU block in STTRAM portion. We need to swap
+                  {
+                     //find out lru block in SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
+                     UInt32 indexSRAM = 0;
+
+                     //Most Read Intensive Block in SRAM
+                     UInt8 minState = 255;
+                     for (UInt32 i = 0; i < SRAM_ways; i++)
+                     {
+                        if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                        {
+                           indexSRAM = i;
+                           minState = m_state[m_TI[i]];
+                        }
+                     }
+
+
+                     swapTwoBlocks(indexSRAM, indexTotal);
+                     forceMigrationSramToSTTram++;
+                     index = indexSRAM; 
+
+                  }
+                  else //Proceed with baseline PHC
+                  {
+                     index = 0;
+                     for (UInt32 i = 0; i < SRAM_ways; i++)
+                     {
+                        if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                        {
+                           index = i;
+                           max_bits = m_lru_bits[i];
+                        }
+                     }
+                  }
 
                }
 
@@ -3168,18 +3273,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                   index =  SRAM_ways;
                   //find out a victim from STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
 
-                  //Most LRU block in STTRAM
-                  /*
-                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
-                  {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-                     {
-                        index = i;
-                        max_bits = m_lru_bits[i];
-                     }
-                  }
-                  */
-                  
                   //Most write intensive block in STTRAM
                   UInt8 maxState = 0;
                   for (UInt32 i = SRAM_ways; i < m_associativity; i++)
@@ -3190,27 +3283,65 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         maxState = m_state[m_TI[i]];
                      }
                   }
-                  
+
                   //swap it with forceMigrationIndex from SRAM
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSTTramToSram++;
                }
-               else  //valid deadblock not found in SRAM. Proceed with baseline PHC. Will return index
+               else  //valid deadblock not found in SRAM. Try to find out more LRU block in SRAM
                {
                   
                   ///////////////////////////////
-                  index = SRAM_ways;
+                  //find out LRU block of entire set
+                  UInt32 indexTotal = 0;
+                  UInt8 max_bits_total = 0;
 
-                  for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                  for (UInt32 i = 0; i < m_associativity; i++)
                   {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     if ((m_lru_bits_unified[i] > max_bits_total) && (isValidReplacement(i)))
                      {
-                        index = i;
-                        max_bits = m_lru_bits[i];
+                        indexTotal = i;
+                        max_bits_total = m_lru_bits_unified[i];
                      }
-                  }               
-                  ///////////////////////////////
+                  }
 
+                  if ((indexTotal>=0) && (indexTotal<SRAM_ways))   //more LRU block in SRAM portion. We need to swap
+                  {
+                     //find out lru block in STTRAM. WE SHOULD SELECT THE MOST WRITE INTENSIVE BLOCK IN STTRAM INSTEAD OF LRU
+                     UInt32 indexSTTRAM = 0;
+                     
+                     //Most Write Intensive Block in STTRAM
+                     UInt8 maxState = 0;
+                     for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                     {
+                        if ((m_state[m_TI[i]] > maxState) && (isValidReplacement(i)))
+                        {
+                           indexSTTRAM = i;
+                           maxState = m_state[m_TI[i]];
+                        }
+                     }
+
+                     swapTwoBlocks(indexSTTRAM, indexTotal);
+                     forceMigrationSTTramToSram++;
+                     index = indexSTTRAM; 
+
+                  }
+                  else //Proceed with baseline PHC
+                  {
+                     index = SRAM_ways;
+                     for (UInt32 i = SRAM_ways; i < m_associativity; i++)
+                     {
+                        if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                        {
+                           index = i;
+                           max_bits = m_lru_bits[i];
+                        }
+                     }
+                  }
+
+
+
+                  ///////////////////////////////
                }
             }
             
@@ -3257,18 +3388,6 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
 
                   //find out a victim from SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
 
-                  //Most LRU block in SRAM
-                  /*
-                  for (UInt32 i = 0; i < SRAM_ways; i++)
-                  {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
-                     {
-                        index = i;
-                        max_bits = m_lru_bits[i];
-                     }
-                  }
-                  */
-                  
                   //Most Read Intense Block in SRAM
                   UInt8 minState = 255;
                   for (UInt32 i = 0; i < SRAM_ways; i++)
@@ -3279,24 +3398,62 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                         minState = m_state[m_TI[i]];
                      }
                   }
-                  
+
 
                   //swap it with forceMigrationIndex block from STTRAM
                   swapTwoBlocks(index, forceMigrationIndex);
                   forceMigrationSramToSTTram++;
                }
-               else  //valid deadblock not found in STTRAM. Proceed with baseline PHC. Will return index
+               else  //valid deadblock not found in STTRAM. Try to find a more LRU block in STTRAM
                {
-                  index = 0;
+               
+                  //find out LRU block of entire set
+                  UInt32 indexTotal = 0;
+                  UInt8 max_bits_total = 0;
 
-                  for (UInt32 i = 0; i < SRAM_ways; i++)
+                  for (UInt32 i = 0; i < m_associativity; i++)
                   {
-                     if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                     if ((m_lru_bits_unified[i] > max_bits_total) && (isValidReplacement(i)))
                      {
-                        index = i;
-                        max_bits = m_lru_bits[i];
+                        indexTotal = i;
+                        max_bits_total = m_lru_bits_unified[i];
                      }
-                  }               
+                  }
+
+                  if ((indexTotal>=SRAM_ways) && (indexTotal<m_associativity))   //more LRU block in STTRAM portion. We need to swap
+                  {
+                     //find out lru block in SRAM. WE SHOULD SELECT THE MOST READ INTENSIVE BLOCK IN SRAM INSTEAD OF LRU
+                     UInt32 indexSRAM = 0;
+
+                     //Most Read Intensive Block in SRAM
+                     UInt8 minState = 255;
+                     for (UInt32 i = 0; i < SRAM_ways; i++)
+                     {
+                        if ((m_state[m_TI[i]] < minState) && (isValidReplacement(i)))
+                        {
+                           indexSRAM = i;
+                           minState = m_state[m_TI[i]];
+                        }
+                     }
+
+
+                     swapTwoBlocks(indexSRAM, indexTotal);
+                     forceMigrationSramToSTTram++;
+                     index = indexSRAM; 
+
+                  }
+                  else //Proceed with baseline PHC
+                  {
+                     index = 0;
+                     for (UInt32 i = 0; i < SRAM_ways; i++)
+                     {
+                        if (m_lru_bits[i] > max_bits && isValidReplacement(i))
+                        {
+                           index = i;
+                           max_bits = m_lru_bits[i];
+                        }
+                     }
+                  }
 
                }
 
