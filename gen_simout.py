@@ -266,7 +266,14 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     results['interval_timer.STTR_reads_hits']  = [float(results['interval_timer.STTR_reads_hits'][core] or 1) for core in range(ncores)]  
   
   if 'interval_timer.STTR_write_hits'  in results:   
-    results['interval_timer.STTR_write_hits']  = [float(results['interval_timer.STTR_write_hits'][core] or 1) for core in range(ncores)]    
+    results['interval_timer.STTR_write_hits']  = [float(results['interval_timer.STTR_write_hits'][core] or 1) for core in range(ncores)]   
+
+
+  if 'interval_timer.g_SRAM_misses'  in results:   
+    results['interval_timer.g_SRAM_misses']  = [float(results['interval_timer.g_SRAM_misses'][core] or 1) for core in range(ncores)]
+
+  if 'interval_timer.g_STTRAM_misses'  in results:   
+    results['interval_timer.g_STTRAM_misses']  = [float(results['interval_timer.g_STTRAM_misses'][core] or 1) for core in range(ncores)]   
 
 
 
@@ -357,6 +364,9 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     ('  SRAM write hits',              'interval_timer.SRAM_write_hits',                format_int),
     ('  STTR reads hits',              'interval_timer.STTR_reads_hits',                format_int),
     ('  STTR write hits',              'interval_timer.STTR_write_hits',                format_int),
+
+    ('  g_SRAM_misses',              'interval_timer.g_SRAM_misses',                format_int),
+    ('  g_STTRAM_misses',              'interval_timer.g_STTRAM_misses',                format_int),
 
 
   ]
