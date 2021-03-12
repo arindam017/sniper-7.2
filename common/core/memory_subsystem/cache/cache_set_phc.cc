@@ -215,6 +215,8 @@ static UInt64 SRAM_write_hits    = 0;
 static UInt64 STTR_reads_hits    = 0;
 static UInt64 STTR_write_hits    = 0;
 
+static UInt64 g_SRAM_misses      = 0;
+static UInt64 g_STTRAM_misses    = 0;
 
 
 
@@ -398,6 +400,9 @@ CacheSetPHC::CacheSetPHC(
       registerStatsMetric("interval_timer", 0 , "SRAM_write_hits",        &SRAM_write_hits  ); 
       registerStatsMetric("interval_timer", 0 , "STTR_reads_hits",        &STTR_reads_hits  ); 
       registerStatsMetric("interval_timer", 0 , "STTR_write_hits",        &STTR_write_hits  ); 
+
+      registerStatsMetric("interval_timer", 0 , "SRAM_misses",          &g_SRAM_misses    ); 
+      registerStatsMetric("interval_timer", 0 , "STTRAM_misses",        &g_STTRAM_misses  ); 
       
 
    }
@@ -703,6 +708,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1 
 
                moveToMRU(i);
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
       
@@ -738,6 +747,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
 
                moveToMRU(i);
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
          }
@@ -770,6 +783,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
+            if ((i>=SRAM_ways) && (i<m_associativity))
+               g_STTRAM_misses++;
+            else if (i>=0) && (i<SRAM_ways)
+               g_SRAM_misses++;
             return i;
          }
       }
@@ -1094,6 +1111,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
 
+         if ((index>=SRAM_ways) && (index<m_associativity))
+            g_STTRAM_misses++;
+         else if ((index>=0) && (index<SRAM_ways))
+            g_SRAM_misses++;
+
          return index;
       
       }   
@@ -1135,6 +1157,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
                moveToMRU(i);
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
       
@@ -1169,6 +1195,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
                moveToMRU(i);
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
          }
@@ -1201,6 +1231,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
             mduringwrite_flag[i]           = 0;  //If a block has been migrated this is set to 1
                
             moveToMRU(i);
+            if ((i>=SRAM_ways) && (i<m_associativity))
+               g_STTRAM_misses++;
+            else if (i>=0) && (i<SRAM_ways)
+               g_SRAM_misses++;
             return i;
          }
       }
@@ -1519,6 +1553,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          m_set_info->incrementAttempt(attempt);
 
 
+         if ((index>=SRAM_ways) && (index<m_associativity))
+            g_STTRAM_misses++;
+         else if ((index>=0) && (index<SRAM_ways))
+            g_SRAM_misses++;
+
          return index;
          
       } 
@@ -1560,6 +1599,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
                moveToMRU(i);
                //printf("invalid block found in sttram\n");
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
       
@@ -1595,6 +1638,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
                moveToMRU(i);
                //printf("invalid block found in sram\n");
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
          }
@@ -1628,6 +1675,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
             moveToMRU(i);
             //printf("invalid block found, but not in proper partition\n");
+            if ((i>=SRAM_ways) && (i<m_associativity))
+               g_STTRAM_misses++;
+            else if (i>=0) && (i<SRAM_ways)
+               g_SRAM_misses++;
             return i;
          }
       }
@@ -2104,6 +2155,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
        
+
+         if ((index>=SRAM_ways) && (index<m_associativity))
+            g_STTRAM_misses++;
+         else if ((index>=0) && (index<SRAM_ways))
+            g_SRAM_misses++;
 
          return index;
          
@@ -2145,6 +2201,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
                moveToMRU(i);
                //printf("invalid block found in sttram\n");
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
       
@@ -2180,6 +2240,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
                moveToMRU(i);
                //printf("invalid block found in sram\n");
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
          }
@@ -2213,6 +2277,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
             moveToMRU(i);
             //printf("invalid block found, but not in proper partition\n");
+            if ((i>=SRAM_ways) && (i<m_associativity))
+               g_STTRAM_misses++;
+            else if (i>=0) && (i<SRAM_ways)
+               g_SRAM_misses++;
             return i;
          }
       }
@@ -2689,6 +2757,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
        
+
+         if ((index>=SRAM_ways) && (index<m_associativity))
+            g_STTRAM_misses++;
+         else if ((index>=0) && (index<SRAM_ways))
+            g_SRAM_misses++;
 
          return index;
          
@@ -2734,6 +2807,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
                moveToMRU(i);
                //printf("invalid block found in sttram\n");
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
       
@@ -2769,6 +2846,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
                moveToMRU(i);
                //printf("invalid block found in sram\n");
+               if ((i>=SRAM_ways) && (i<m_associativity))
+                  g_STTRAM_misses++;
+               else if (i>=0) && (i<SRAM_ways)
+                  g_SRAM_misses++;
                return i;
             }
          }
@@ -2802,6 +2883,10 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
                
             moveToMRU(i);
             //printf("invalid block found, but not in proper partition\n");
+            if ((i>=SRAM_ways) && (i<m_associativity))
+               g_STTRAM_misses++;
+            else if (i>=0) && (i<SRAM_ways)
+               g_SRAM_misses++;
             return i;
          }
       }
@@ -3290,6 +3375,11 @@ CacheSetPHC::getReplacementIndex(CacheCntlr *cntlr, IntPtr eip, UInt32 set_index
          moveToMRU(index);
          m_set_info->incrementAttempt(attempt); 
        
+
+         if ((index>=SRAM_ways) && (index<m_associativity))
+            g_STTRAM_misses++;
+         else if ((index>=0) && (index<SRAM_ways))
+            g_SRAM_misses++;
 
          return index;
          
